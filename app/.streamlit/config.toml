@@ -1,0 +1,16 @@
+[server]
+maxUploadSize = 80000
+
+[theme]
+base="light"
+
+[client]
+showErrorDetails = false
+
+[global]
+showWarningOnDirectExecution = false
+
+
+
+
+

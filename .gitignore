@@ -1,0 +1,5 @@
+.DS_Store
+
+*.pyc
+debug.log
+*.DS_Store
