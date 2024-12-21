@@ -99,14 +99,14 @@ def show_microbio_qc():
                     progress_bar.progress(40, text='Checking for missing values...')
                     logger.info("~~~ Checking for missing values ~~~")
                     missing_counts = data.isnull().sum()
-                    if missing_counts.sum() > 0:
+                    if missing_counts.any():
                         missing_percentages = (missing_counts / total_counts) * 100
                         missing_info = pd.DataFrame({
                             'Missing Count': missing_counts,
                             'Missing Percentage': missing_percentages.map('{:.2f}%'.format)
                         })
-                        missing_info_filtered = missing_info[missing_info['Missing Count'] > 0]
-                        st.write(missing_info_filtered)
+                        missing_info_sorted = missing_info.sort_values(by='Missing Count', ascending=False)
+                        st.write(missing_info_sorted)
                         qc_summary.append("Missing values found in columns - " + ', '.join(missing_info[missing_info['Missing Count'] > 0].index.tolist()))
                     else:
                         st.write("No missing values found in all required columns.")
@@ -163,58 +163,6 @@ def show_microbio_qc():
                     st.markdown(f"{i + 1}. {recommendation}")
 
             logger.info("QC Summary and Recommendations displayed.")
-
-            # Select and Download revisions to the data
-            def apply_changes(data, convert_dtypes, apply_deduplication):
-                if convert_dtypes:
-                    data = validate_and_convert_dtypes(TABLE, data)[0]
-
-                if apply_deduplication:
-                    data = data.drop_duplicates()
-
-                return data
-
-            def convert_df_to_file_format(data, file_format):
-                if file_format == 'csv':
-                    return data.to_csv(index=False).encode('utf-8')
-                elif file_format == 'parquet':
-                    return data.to_parquet(index=False)
-                else:
-                    return None
-
-            st.write("# Select and Download Recommended Revisions to the Data")
-            st.info("The entire page will reload before applying changes. Please wait for the page to reload and changes to be applied before proceeding to download. This may take a while.", icon="ℹ️")
-            with st.expander("Exapnd to View"):
-            # if st.session_state:
-                st.write("#### Select changes to apply")
-                with st.form(key='apply_microbio_changes_form'):
-                    # Create checkboxes for changes
-                    if duplicate_count > 0:
-                        apply_deduplication = st.checkbox("Remove duplicates")
-                    else:
-                        apply_deduplication = False
-
-                    if mismatch_columns:
-                        convert_dtypes = st.checkbox("Convert to expected data types")
-                    else:
-                        convert_dtypes = False
-
-                    st.write("#### Select file format for download")
-                    file_type = st.selectbox("Select file type for download", ["csv", "parquet"])
-                    submit_button = st.form_submit_button(label='Submit')
-
-                if submit_button:
-                    with st.spinner("Applying changes..."):
-                        time.sleep(10)
-                        revised_data = apply_changes(data.copy(), convert_dtypes, apply_deduplication)
-                        revised_data_file = convert_df_to_file_format(revised_data, file_type)
-                        st.write("Successfully applied changes. Click to download revised data.")
-                    if revised_data_file:
-                        st.download_button(
-                            label="Download revised data",
-                            data=revised_data_file,
-                            file_name=f"revised_{TABLE}_data.{file_type}",
-                        )
 
         else:
             st.write(f"File not found. Please provide the correct root location and file type to proceed.")

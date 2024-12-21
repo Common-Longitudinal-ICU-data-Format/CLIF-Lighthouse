@@ -252,11 +252,6 @@ def plot_histograms_by_device_category(data, selected_category, selected_mode = 
     plt.subplots_adjust(top=0.9, hspace=0.4, wspace=0.4)
     return g
 
-import pandas as pd
-import logging
-
-# Configure the logger
-logger = logging.getLogger(__name__)
 
 def validate_and_convert_dtypes(table_name, data):
     """
@@ -287,7 +282,7 @@ def validate_and_convert_dtypes(table_name, data):
                     try:
                         # Attempt to convert to datetime, coerce errors to NaT
                         data[column] = pd.to_datetime(data[column], errors='coerce')
-                        validation_results[-1] = (column, actual_dtype, expected_dtype, 'Converted')
+                        # validation_results[-1] = (column, actual_dtype, expected_dtype, 'Converted')
                     except Exception as e:
                         logger.error(f"Error converting column {column} to datetime: {e}")
                 else:
@@ -305,7 +300,7 @@ def validate_and_convert_dtypes(table_name, data):
                     else:
                         data[column] = data[column].astype(expected_dtype)
 
-                    validation_results[-1] = (column, actual_dtype, expected_dtype, 'Converted')
+                    # validation_results[-1] = (column, actual_dtype, expected_dtype, 'Converted')
 
                 except Exception as e:
                     logger.error(f"Error converting column {column} to {expected_dtype}: {e}")
@@ -315,44 +310,8 @@ def validate_and_convert_dtypes(table_name, data):
             # Log missing columns
             validation_results.append((column, 'Not Found', expected_dtype, 'Missing'))
 
-    return data, validation_results
+    return data, validation_results         
 
-
-# def validate_and_convert_dtypes(table_name, data):
-#     """
-#     Validate and convert data types of columns in the DataFrame 
-#     based on expected data types.
-    
-#     Parameters:
-#         table_name (str): Name of the table.
-#         data (DataFrame): DataFrame to validate and convert data types.
-    
-#     """
-#     expected_dtypes = expected_data_types[table_name]
-#     validation_results = []
-#     for column, expected_dtype in expected_dtypes.items():
-#         if column in data.columns:
-#             actual_dtype = data[column].dtype
-#             if actual_dtype != expected_dtype:
-#                 validation_results.append((column, actual_dtype, expected_dtype, 'Mismatch'))
-#                 try:
-#                     if expected_dtype == 'datetime64':
-#                         data[column] = pd.to_datetime(data[column], errors='coerce')
-#                     elif expected_dtype == 'float64':
-#                         data[column] = pd.to_numeric(data[column], errors='coerce')
-#                     elif expected_dtype == 'bool':
-#                         data[column] = data[column].astype('bool')
-#                     else:
-#                         data[column] = data[column].astype(expected_dtype)
-#                     validation_results[-1] = (column, actual_dtype, expected_dtype, 'Converted')
-#                 except Exception as e:
-#                     logger.error(f"Error converting column {column}: {e}")
-#             else:
-#                 validation_results.append((column, actual_dtype, expected_dtype, 'Match'))
-#         else:
-#             validation_results.append((column, 'Not Found', expected_dtype, 'Missing'))
-
-#     return data, validation_results
 
 def name_category_mapping(data):
     """

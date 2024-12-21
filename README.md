@@ -14,7 +14,7 @@ deactivate
 conda deactivate
 ```
 
-## Environment setup
+## A. Environment setup
 
 The environment setup code is provided in the setup.sh file for macOS and setup.bat for Windows.
 
@@ -36,6 +36,14 @@ chmod +x setup.sh
 Run the script
 ```sh
 setup.bat
+```
+
+## B. Application Launch
+To start the application, navigate to the app directory in the terminal and execute the following command:
+
+```
+cd app
+streamlit run app.py
 ```
 
 ## CLIF-Lighthouse - Quality Control
