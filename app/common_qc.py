@@ -4,18 +4,19 @@ import pyarrow.parquet as pq
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
+import os
 from fuzzywuzzy import fuzz 
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
 from reqd_vars_dtypes import required_variables, expected_data_types
 
 # pages_layout()
-set_bg_hack_url()
+# set_bg_hack_url()
 # set_sidebar()
 
 # Initialize logger
-setup_logging()
-logger = logging.getLogger(__name__)
+# setup_logging()
+# logger = logging.getLogger(__name__)
 
 # Common Functions
 def read_data(filepath, filetype):
@@ -328,34 +329,58 @@ def name_category_mapping(data):
             mappings.append(frequency)
     return mappings
 
-def check_time_overlap(data):
-    # Sort by patient_id and in_dttm to make comparisons easier
-    data = data.sort_values(by=['patient_id', 'in_dttm'])
-    
-    overlaps = []
-    
-    # Group by patient_id to compare bookings for each patient
-    for patient_id, group in data.groupby('patient_id'):
-        for i in range(len(group) - 1):
-            # Current and next bookings
-            current = group.iloc[i]
-            next = group.iloc[i + 1]
+def check_time_overlap(data, root_location, filetype):
+    try:
+        # Check if 'patient_id' exists in the data
+        if 'patient_id' not in data.columns:
+            hospitalization_path = os.path.join(root_location, f'clif_hospitalization.{filetype}')
+            hospitalization_table = read_data(hospitalization_path, filetype)
+            if hospitalization_table is None:
+                raise ValueError("patient_id is missing, and the hospitalization table is not provided.")
+            
+            # Join adt_table with hospitalization_table to get patient_id
+            data = data.merge(
+                hospitalization_table[['hospitalization_id', 'patient_id']],
+                on='hospitalization_id',
+                how='left'
+            )
+            
+            # Check if the join was successful
+            if 'patient_id' not in data.columns or data['patient_id'].isnull().all():
+                raise ValueError("Unable to retrieve patient_id after joining with hospitalization_table.")
+        
+        
+        # Sort by patient_id and in_dttm to make comparisons easier
+        data = data.sort_values(by=['patient_id', 'in_dttm'])
+        
+        overlaps = []
+        
+        # Group by patient_id to compare bookings for each patient
+        for patient_id, group in data.groupby('patient_id'):
+            for i in range(len(group) - 1):
+                # Current and next bookings
+                current = group.iloc[i]
+                next = group.iloc[i + 1]
 
-            # Check if the locations are different and times overlap
-            if (
-                current['location_name'] != next['location_name'] and
-                current['out_dttm'] > next['in_dttm']
-            ):
-                overlaps.append({
-                    'patient_id': patient_id,
-                    'Initial Location': (current['location_name'], current['location_category']),
-                    'Overlapping Location': (next['location_name'], next['location_name']),
-                    'Admission Start': current['in_dttm'],
-                    'Admission End': current['out_dttm'],
-                    'Next Admission Start': next['in_dttm']
-                })
+                # Check if the locations are different and times overlap
+                if (
+                    current['location_name'] != next['location_name'] and
+                    current['out_dttm'] > next['in_dttm']
+                ):
+                    overlaps.append({
+                        'patient_id': patient_id,
+                        'Initial Location': (current['location_name'], current['location_category']),
+                        'Overlapping Location': (next['location_name'], next['location_name']),
+                        'Admission Start': current['in_dttm'],
+                        'Admission End': current['out_dttm'],
+                        'Next Admission Start': next['in_dttm']
+                    })
+        
+        return overlaps
     
-    return overlaps
+    except Exception as e:
+        # Handle errors gracefully
+        raise RuntimeError(f"Error checking time overlap: {str(e)}")
 
 def fix_overlaps(data, overlapping_patient_ids):
     """

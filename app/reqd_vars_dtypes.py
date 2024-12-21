@@ -71,7 +71,6 @@ expected_data_types = {
         'mar_action_category': 'object'
     },
     'ADT': {
-        'patient_id': 'object',
         'hospitalization_id': 'object',
         'hospital_id': 'object',
         'in_dttm': 'datetime64',

@@ -39,7 +39,7 @@ setup.bat
 ```
 
 ## B. Application Launch
-To start the application, navigate to the app directory in the terminal and execute the following command:
+To start the application navigate to the app directory in the terminal by executing the following command:
 
 ```
 cd app
