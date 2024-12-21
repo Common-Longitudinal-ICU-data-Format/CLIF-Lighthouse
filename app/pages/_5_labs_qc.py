@@ -87,9 +87,7 @@ def show_labs_qc():
                     data, validation_results = validate_and_convert_dtypes(TABLE, data)
                     validation_df = pd.DataFrame(validation_results, columns=['Column', 'Actual', 'Expected', 'Status'])
                     mismatch_columns = [row[0] for row in validation_results if row[1] != row[2]]
-                    convert_dtypes = False
                     if mismatch_columns:
-                        convert_dtypes = True
                         qc_summary.append("Some columns have mismatched data types.")
                         qc_recommendations.append("Some columns have mismatched data types. Please review and convert to the expected data types.")
                     st.write(validation_df)
@@ -145,7 +143,6 @@ def show_labs_qc():
                 with st.spinner("Checking lab_value for non-numeric characters..."):
                     progress_bar.progress(65, text='Checking for lab_value_numeric...')
                     logger.info("~~~ Checking for lab_value_numeric ~~~")
-                    create_lab_value_numeric = False
                     if 'lab_value_numeric' not in data.columns:
                         if pd.to_numeric(data['lab_value'], errors='coerce').isna().any():
                             logger.info("Non-numeric characters present in lab_value.")
@@ -153,7 +150,6 @@ def show_labs_qc():
                             qc_recommendations.append("Recommend extracting numeric values and creating a new column - 'lab_value_numeric'.")
                             col = data['lab_value'].astype(str)
                             data['lab_value_numeric'] = pd.to_numeric(col.str.extract('(\d+\.?\d*)', expand=False), errors='coerce')
-                            create_lab_value_numeric = True
                             logger.info("Created 'lab_value_numeric' column.")
                             st.write("Non-numeric characters present in lab_value.")
                         else:
@@ -212,13 +208,33 @@ def show_labs_qc():
                 # Check for outliers
                 st.write("## Outliers")
                 with st.spinner("Checking for outliers..."):
-                    data, replaced_count, _, _ = replace_outliers_with_na_long(data, labs_outlier_thresholds, 'lab_category', 'lab_value_numeric')
+                    progress_bar.progress(77, text='Checking for outliers...')
+                    logger.info("Displaying outlier count...")
+                    data, replaced_count, _, outlier_details = replace_outliers_with_na_long(data, labs_outlier_thresholds, 'lab_category', 'lab_value_numeric')
                     if replaced_count > 0:
-                        st.write(replaced_count, "outliers found in the data.")
-                        qc_summary.append("Outliers found in data.")
-                        qc_recommendations.append("Outliers found. Please replace values with NA.")
-                        st.write("<a href='https://github.com/kaveriC/CLIF-1.0/blob/main/outlier-handling/nejm_outlier_thresholds_labs.csv' id='labs_thresh'>Acceptable labs thresholds.</a>", unsafe_allow_html=True)
-
+                        st.write(replaced_count, "outliers found in the data. <a href='https://github.com/clif-consortium/CLIF/blob/main/outlier-handling/outlier_thresholds_labs.csv' id='labs_thresh'>Acceptable lab category thresholds.</a>", unsafe_allow_html=True)
+                        st.write("###### * preference range")
+                        all_outliers_summary = []
+                        for detail in outlier_details:
+                            if any(detail[3]):
+                                category, lower, upper, outliers = detail
+                                # Append details to the summary list
+                                all_outliers_summary.append({
+                                    "Category": category,
+                                    "Range*": f"{lower} - {upper}",
+                                    "Outlier (%)": (len(outliers)/total_counts * 100).__round__(2),
+                                })
+                                outlier_percent = ((len(outliers) / total_counts) * 100).__round__(2)
+                                qc_summary.append(f"A total of {len(outliers)} or {outlier_percent}% outlier(s) in {category}.")
+                                qc_recommendations.append(f"A total of {len(outliers)} or {outlier_percent}% outlier(s) in {category} need to be replaced. Please review the outliers and replace them with recommended values.")
+                        if all_outliers_summary:
+                            outliers_df = pd.DataFrame(all_outliers_summary)
+                            outliers_df = outliers_df.sort_values(by='Outlier (%)', ascending=False)
+                            st.write(outliers_df)
+                    else:
+                        st.write("No outliers found.")
+                        qc_summary.append("No outliers found.")
+        
 
                 # Lab Category Value Distribution
                 st.write("## Value Distribution - Lab Categories")
@@ -253,7 +269,7 @@ def show_labs_qc():
             st.success(f"Quality check completed. Time taken to run summary: {elapsed_time:.2f} seconds", icon="✅")
             logger.info(f"Time taken to QC: {elapsed_time:.2f} seconds")
 
-            # Display QC Summary and Recommendations
+            # 2. Display QC Summary and Recommendations
             st.write("# QC Summary and Recommendations")
             logger.info("Displaying QC Summary and Recommendations.")
 
