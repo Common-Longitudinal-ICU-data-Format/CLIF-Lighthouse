@@ -172,7 +172,7 @@ def show_adt_qc():
                 st.write('## Checking for Overlapping Admissions')
                 with st.spinner("Checking for Overlapping Admissions..."):
                     progress_bar.progress(85, text='Checking for Overlapping Admissions...')
-                    overlaps = check_time_overlap(data)
+                    overlaps = check_time_overlap(data, root_location, filetype)
                     if len(overlaps) > 0:
                         overlaps = pd.DataFrame(overlaps)
                         st.write(overlaps)
