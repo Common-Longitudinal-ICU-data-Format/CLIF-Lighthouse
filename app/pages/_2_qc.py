@@ -32,6 +32,11 @@ def show_qc():
             # File type selection
             filetype = st.selectbox("File type", ["", "csv", "parquet", "fst"], format_func=lambda x: "Select..." if x == "" else x)
 
+            # Sampling option
+            s_col1, _, _, _ = st.columns(4)
+            with s_col1:
+                sampling_option = st.number_input("Set dataset sample(%) for QC", placeholder="100%", min_value=1, max_value=100, value=100, step=5)
+
             submit = st.form_submit_button(label='Submit')
 
             if submit:
@@ -49,6 +54,10 @@ def show_qc():
         if filetype:
             logger.info(f"File type selected: {filetype}")
             st.session_state['filetype'] = filetype
+        
+        if sampling_option:
+            logger.info(f"Sampling option selected: {sampling_option}")
+            st.session_state['sampling_option'] = sampling_option
 
         if root_location and filetype:
             tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
