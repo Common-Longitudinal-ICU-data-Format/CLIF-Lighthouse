@@ -19,7 +19,4 @@ source .clif_lighthouse/bin/activate
 echo "Installing dependencies..."
 pip install -r requirements.txt
 
-# Run the Streamlit app
-echo "Starting the Streamlit app..."
-cd app/
-streamlit run app.py
+
