@@ -83,12 +83,10 @@ def show_microbio_qc():
                     logger.info("~~~ Validating data types ~~~")
                     data, validation_results = validate_and_convert_dtypes('Microbiology_Culture', data)
                     validation_df = pd.DataFrame(validation_results, columns=['Column', 'Actual', 'Expected', 'Status'])
-                    mismatch_columns = [row[0] for row in validation_results if row[1] != row[2]]
-                    convert_dtypes = False
+                    mismatch_columns = [row[0] for row in validation_results if row[3] == 'Mismatch']
                     if mismatch_columns:
-                        convert_dtypes = True
-                        qc_summary.append("Some columns have mismatched data types.")
-                        qc_recommendations.append("Some columns have mismatched data types. Please review and convert to the expected data types.")
+                        qc_summary.append(f"Column(s) with mismatched data types: {mismatch_columns}")
+                        qc_recommendations.append(f"Column(s) with mismatched data types: {mismatch_columns}. Please review and convert to the expected data types.")
                     st.write(validation_df)
                     logger.info("Data type validation completed.")
 
@@ -132,13 +130,17 @@ def show_microbio_qc():
                 with st.spinner("Displaying Name to Category Mapping..."):
                     progress_bar.progress(90, text='Displaying Name to Category Mapping...')
                     mappings = name_category_mapping(data)
-                    n = 1
-                    for i, mapping in enumerate(mappings):
-                        mapping_name = mapping.columns[0]
-                        mapping_cat = mapping.columns[1]
-                        st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
-                        st.write(mapping.reset_index().drop("index", axis = 1))
-                        n += 1
+                    if mappings:
+                        n = 1
+                        for i, mapping in enumerate(mappings):
+                            mapping_name = mapping.columns[0]
+                            mapping_cat = mapping.columns[1]
+                            st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
+                            st.write(mapping.reset_index().drop("index", axis = 1))
+                            n += 1
+                    else:
+                        st.write("No mappings available to display.")
+                        logger.warning("Mappings returned empty or invalid.")
 
                 progress_bar.progress(100, text='Quality check completed. Displaying results...')
              
