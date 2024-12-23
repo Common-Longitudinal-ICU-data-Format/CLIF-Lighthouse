@@ -23,12 +23,12 @@ expected_data_types = {
         'vital_value': 'float64',
         'meas_site_name': 'object'
     },
-    'Encounter_Demographic_Disposition': {
-        'encounter_id': 'object',
-        'age_at_admission': 'int64', 
-        'disposition_name': 'object',
-        'disposition_category': 'object'
-    },
+    # 'Encounter_Demographic_Disposition': {
+    #     'encounter_id': 'object',
+    #     'age_at_admission': 'int64', 
+    #     'disposition_name': 'object',
+    #     'disposition_category': 'object'
+    # },
     'Respiratory_Support': {
         'hospitalization_id': 'object',
         'recorded_dttm': 'datetime64',
@@ -134,7 +134,6 @@ expected_data_types = {
         'text_value': 'object'
     },
     'Position': {
-        'patient_id': 'object',
         'hospitalization_id': 'object',
         'recorded_dttm': 'datetime64',
         'position_name': 'object',
@@ -154,9 +153,9 @@ required_variables = {
         'hospitalization_id', 'recorded_dttm', 'vital_name', 'vital_category',
         'vital_value', 'meas_site_name'
     ],
-    'Encounter_Demographic_Disposition': [
-        'encounter_id', 'age_at_admission', 'disposition_name', 'disposition_category'
-    ],
+    # 'Encounter_Demographic_Disposition': [
+    #     'encounter_id', 'age_at_admission', 'disposition_name', 'disposition_category'
+    # ],
     'Respiratory_Support': [
         'hospitalization_id', 'recorded_dttm', 'device_name', 'device_category',
         'vent_brand_name', 'mode_name', 'mode_category', 'tracheostomy', 'lpm_set', 
@@ -172,7 +171,7 @@ required_variables = {
         'mar_action_name', 'mar_action_category'
     ],
     'ADT': [
-        'patient_id', 'hospitalization_id', 'hospital_id', 'in_dttm', 
+        'hospitalization_id', 'hospital_id', 'in_dttm', 
         'out_dttm', 'location_name', 'location_category'
     ],
     'Hospitalization': [
@@ -197,6 +196,6 @@ required_variables = {
         'assessment_group', 'numerical_value', 'categorical_value', 'text_value'
     ],
     'Position': [
-        'patient_id', 'hospitalization_id', 'recorded_dttm', 'position_name', 'position_category'
+        'hospitalization_id', 'recorded_dttm', 'position_name', 'position_category'
     ]
 }

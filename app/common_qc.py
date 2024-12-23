@@ -329,14 +329,19 @@ def name_category_mapping(data):
             mappings.append(frequency)
     return mappings
 
-def check_time_overlap(data, root_location, filetype):
+def check_time_overlap(data, conn):
     try:
         # Check if 'patient_id' exists in the data
         if 'patient_id' not in data.columns:
-            hospitalization_path = os.path.join(root_location, f'clif_hospitalization.{filetype}')
-            hospitalization_table = read_data(hospitalization_path, filetype)
-            if hospitalization_table is None:
-                raise ValueError("patient_id is missing, and the hospitalization table is not provided.")
+            # Query hospitalization table from DuckDB
+            try:
+                query = "SELECT hospitalization_id, patient_id FROM hospitalization"
+                hospitalization_table = conn.execute(query).fetchdf() 
+            except Exception as e:
+                raise ValueError(f"Unable to query hospitalization table: {str(e)}")
+
+            if hospitalization_table.empty:
+                raise ValueError("Hospitalization table is empty or not provided.")
             
             # Join adt_table with hospitalization_table to get patient_id
             data = data.merge(
@@ -382,25 +387,3 @@ def check_time_overlap(data, root_location, filetype):
         # Handle errors gracefully
         raise RuntimeError(f"Error checking time overlap: {str(e)}")
 
-def fix_overlaps(data, overlapping_patient_ids):
-    """
-    Fix overlaps only for the specified patient IDs with detected overlaps.
-    """
-    # Filter only relevant patients with detected overlaps
-    data = data[data['patient_id'].isin(overlapping_patient_ids)]
-
-    # Sort the data to ensure chronological order for adjustments
-    data = data.sort_values(by=['patient_id', 'in_dttm'])
-
-    # Iterate over each patient’s data to fix overlaps
-    for patient_id, group in data.groupby('patient_id'):
-        for i in range(len(group) - 1):
-            current_idx = group.index[i]
-            next_idx = group.index[i + 1]
-
-            # If there's an overlap, adjust the current out_dttm
-            if data.loc[current_idx, 'out_dttm'] > data.loc[next_idx, 'in_dttm']:
-                # Set the out_dttm to just before the next in_dttm
-                data.loc[current_idx, 'out_dttm'] = data.loc[next_idx, 'in_dttm'] - pd.Timedelta(minutes=1)
-
-    return data

@@ -1,5 +1,9 @@
 import streamlit as st
 import logging
+import duckdb
+import pandas as pd
+import pyarrow.parquet as pq
+import os
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
 from pages._3_adt_qc import show_adt_qc
@@ -18,19 +22,20 @@ def show_qc():
     '''
     set_bg_hack_url()
 
-    # Initialize logger
     setup_logging()
     logger = logging.getLogger(__name__)
+
+    conn = duckdb.connect(database=':memory:')
 
     _, main_qc_form, _ = st.columns([1, 3, 1])
     with main_qc_form:
         st.title("Quality Controls")
-        with st.form(key='main_form', clear_on_submit=False):
-        # Root location input
-            root_location = st.text_input("Enter root location to proceed")   
-
-            # File type selection
-            filetype = st.selectbox("File type", ["", "csv", "parquet", "fst"], format_func=lambda x: "Select..." if x == "" else x)
+        with st.form(key='main_form', clear_on_submit=False):  
+            files = st.file_uploader(
+                "Select one or more files", 
+                accept_multiple_files=True, 
+                type=["csv", "parquet", "fst"]
+            )
 
             submit = st.form_submit_button(label='Submit')
 
@@ -40,43 +45,61 @@ def show_qc():
                 st.info("Note that a new tab will not load until the current tab has finished loading. " \
                     "The overall progress of the quality control checks is displayed below. For detailed progress information, please expand the QC section.", 
                     icon="ℹ️")
-        
-        # Store user inputs in session_state
-        if root_location:
-            logger.info(f"Root location entered: {root_location}")
-            st.session_state['root_location'] = root_location
-
-        if filetype:
-            logger.info(f"File type selected: {filetype}")
-            st.session_state['filetype'] = filetype
-
-        if root_location and filetype:
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
-                "Hospitalization", "Labs", "Medication", "Microbiology", "Patient", 
-                "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
-
-            with tab1:
-                show_adt_qc()
-            with tab2:
-                show_hosp_qc()
-            with tab3:
-                show_labs_qc()
-            with tab4:
-                show_meds_qc()
-            with tab5:
-                show_microbio_qc()
-            with tab6:
-                show_patient_qc()
-            with tab7:
-                show_patient_assess_qc()
-            with tab8:
-                show_position_qc()
-            with tab9:
-                show_respiratory_support_qc()
-            with tab10:
-                show_vitals_qc()
-
                 
+    if files:
+        col = st.columns(5)[2]
+        with col:
+            ttl_files = len(files)
+            file_cnt = 1
+            with st.spinner(f"Loading {ttl_files} files into database..."):
+                for file in files:
+                    if file.name.endswith(".csv"):
+                        df = pd.read_csv(file)
+                    elif file.name.endswith(".parquet"):
+                        df = pq.read_table(file)
+                        df = df.to_pandas()
+                    elif file.name.endswith(".fst"):
+                        df = pd.read_fwf(file)
+                    else:
+                        st.error(f"Unsupported file type for {file.name}")
+                        continue
+
+                    table_name = os.path.splitext(file.name.replace('clif_', ''))[0]
+                    logger.info(f"Loading file {file.name} as {table_name}")
+
+                    conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
+                    logger.info(f"Loaded {file.name} as table '{table_name}'")
+                    st.success(f"✅ Loaded {file.name} as table '{table_name}'")
+                    file_cnt += 1
+
+                st.session_state['duckdb_conn'] = conn
+
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
+            "Hospitalization", "Labs", "Medication", "Microbiology", "Patient", 
+            "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
+
+        with tab1:
+            show_adt_qc()
+        with tab2:
+            show_hosp_qc()
+        with tab3:
+            show_labs_qc()
+        with tab4:
+            show_meds_qc()
+        with tab5:
+            show_microbio_qc()
+        with tab6:
+            show_patient_qc()
+        with tab7:
+            show_patient_assess_qc()
+        with tab8:
+            show_position_qc()
+        with tab9:
+            show_respiratory_support_qc()
+        with tab10:
+            show_vitals_qc()
+
+            
 
 
 
