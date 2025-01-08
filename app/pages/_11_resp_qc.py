@@ -84,12 +84,10 @@ def show_respiratory_support_qc():
                     logger.info("~~~ Validating data types ~~~")
                     data, validation_results = validate_and_convert_dtypes(TABLE, data)
                     validation_df = pd.DataFrame(validation_results, columns=['Column', 'Actual', 'Expected', 'Status'])
-                    mismatch_columns = [row[0] for row in validation_results if row[1] != row[2]]
-                    convert_dtypes = False
+                    mismatch_columns = [row[0] for row in validation_results if row[3] == 'Mismatch']
                     if mismatch_columns:
-                        convert_dtypes = True
-                        qc_summary.append("Some columns have mismatched data types.")
-                        qc_recommendations.append("Some columns have mismatched data types. Please review and convert to the expected data types.")
+                        qc_summary.append(f"Column(s) with mismatched data types: {mismatch_columns}")
+                        qc_recommendations.append(f"Column(s) with mismatched data types: {mismatch_columns}. Please review and convert to the expected data types.")
                     st.write(validation_df)
                     logger.info("Data type validation completed.")
 
@@ -147,124 +145,215 @@ def show_respiratory_support_qc():
                         qc_summary.append("Outliers found in the data.")
                         qc_recommendations.append("Outliers found. Please replace values with NA.")
                         st.write("Outliers found in the data.")
-
+                
                 st.write("## Device Category Summaries")
                 st.write("###### * With Outliers")
-                with st.spinner("Displaying summaries by device category..."):
-                    st.info("The page will reload to display the summaries by device category. Please wait for the page to reload.")
-                    progress_bar.progress(70, text='Displaying summaries by device category...')
-                    logger.info("~~~ Diplaying summaries by device category ~~~")
-                    categories = data['device_category'].dropna().unique()
-                    categories.sort()
-                    with st.form(key='device_mode_category_form'):
-                        selected_category = st.selectbox('Select Device Category:', options = categories)
-                        opt_mode_category = st.radio("Would you like to choose a mode category for the selected device category?", ['No', 'Yes'], horizontal=True, captions=['Ignore next dropdown if No', 'Select mode category below'])
-                        modes = data['mode_category'].dropna().unique()
-                        modes.sort()
-                        selected_mode = st.selectbox('Select Mode Category:', options = modes)
-                        st.session_state['selected_category'] = selected_category
-                        st.session_state['selected_mode'] = selected_mode
-                        submit_mode_opt = st.form_submit_button(label='Submit')
-                        if submit_mode_opt and opt_mode_category == 'Yes':
-                            filtered_df = df[(df['device_category'] == st.session_state['selected_category']) & (df['mode_category'] == st.session_state['selected_mode'])]
-                            if filtered_df.empty:
-                                st.warning(f"No data found for device category '{st.session_state['selected_category']}' and mode category '{st.session_state['selected_mode']}'.")
-                            else:
-                                st.write(f"### 1. Histograms for {st.session_state['selected_category']} with Mode Category {st.session_state['selected_mode']}")
-                                cat_plot = plot_histograms_by_device_category(df, st.session_state['selected_category'], st.session_state['selected_mode'])
-                                st.pyplot(cat_plot)
+                def device_category_summary_fragment():
+                    with st.spinner("Displaying summaries by device category..."):
+                        st.info("The page will reload to display the summaries by device category. Please wait for the page to reload.")
+                        progress_bar.progress(70, text='Displaying summaries by device category...')
+                        logger.info("~~~ Displaying summaries by device category ~~~")
+                        
+                        categories = data['device_category'].dropna().unique()
+                        categories.sort()
+                        
+                        with st.form(key='device_mode_category_form'):
+                            selected_category = st.selectbox('Select Device Category:', options=categories)
+                            opt_mode_category = st.radio(
+                                "Would you like to choose a mode category for the selected device category?",
+                                ['No', 'Yes'],
+                                horizontal=True,
+                                captions=['Ignore next dropdown if No', 'Select mode category below']
+                            )
+                            modes = data['mode_category'].dropna().unique()
+                            modes.sort()
+                            selected_mode = st.selectbox('Select Mode Category:', options=modes)
+                            
+                            st.session_state['selected_category'] = selected_category
+                            st.session_state['selected_mode'] = selected_mode
+                            
+                            submit_mode_opt = st.form_submit_button(label='Submit')
+                            
+                            if submit_mode_opt:
+                                if opt_mode_category == 'Yes':
+                                    filtered_df = df[
+                                        (df['device_category'] == st.session_state['selected_category']) & 
+                                        (df['mode_category'] == st.session_state['selected_mode'])
+                                    ]
+                                    if filtered_df.empty:
+                                        st.warning(f"No data found for device category '{st.session_state['selected_category']}' and mode category '{st.session_state['selected_mode']}'.")
+                                    else:
+                                        display_filtered_data(filtered_df, st.session_state['selected_category'], st.session_state['selected_mode'])
+                                else:
+                                    filtered_df = df[df['device_category'] == st.session_state['selected_category']]
+                                    if filtered_df.empty:
+                                        st.warning(f"No data found for device category '{st.session_state['selected_category']}'.")
+                                    else:
+                                        display_filtered_data(filtered_df, st.session_state['selected_category'])
 
-                                st.write(f"### 2. Summary for {st.session_state['selected_category']} with Mode Category {st.session_state['selected_mode']}")
-                                cat_data = df[(df['device_category'] == st.session_state['selected_category']) & (df['mode_category'] == st.session_state['selected_mode'])]
-                                cat_summary = cat_data.describe()
-                                st.write(cat_summary)
+                def display_filtered_data(filtered_df, selected_category, selected_mode=None):
+                    st.write(f"### 1. Histograms for {selected_category}" + (f" with Mode Category {selected_mode}" if selected_mode else ""))
+                    cat_plot = plot_histograms_by_device_category(df, selected_category, selected_mode)
+                    st.pyplot(cat_plot)
+                    
+                    st.write(f"### 2. Summary for {selected_category}" + (f" with Mode Category {selected_mode}" if selected_mode else ""))
+                    cat_data = filtered_df.describe()
+                    st.write(cat_data)
+                    
+                    i = 3
+                    device_cat_count = filtered_df.groupby(['device_category', 'device_name']).size().reset_index(name='count')
+                    sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
+                    if not sorted_dev.empty:
+                        st.write(f"### {i}. Device Name to Device Category Mapping for {selected_category}")
+                        st.write(sorted_dev)
+                        i += 1
+                    
+                    mode_cat_count = filtered_df.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
+                    sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
+                    if not sorted_mode.empty:
+                        st.write(f"### {i}. Mode Name to Mode Category Mapping for {selected_category}")
+                        st.write(sorted_mode)
+                        i += 1
 
-                                i = 3
-                                device_cat_count = cat_data.groupby(['device_category', 'device_name']).size().reset_index(name='count')
-                                sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
-                                if not sorted_dev.empty:
-                                    st.write(f"### {i}. Device Name to Device Category Mapping for {st.session_state['selected_category']}")
-                                    st.write(sorted_dev)
-                                    i += 1
+                    if selected_category == 'IMV':
+                        st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
+                        encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
+                        vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
+                        vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
+                        vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
+                        vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
+                        
+                        initial_mode_choice = (
+                            vent_resp_tables
+                            .dropna(subset=['mode_category'])  
+                            .groupby('hospitalization_id')           
+                            .apply(lambda x: x.iloc[0])                    
+                            .groupby('mode_category')          
+                            .size()
+                            .rename('count')                            
+                        )
+                        st.write(initial_mode_choice)
 
-                                # st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
-                                mode_cat_count = cat_data.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
-                                sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
-                                if not sorted_mode.empty:
-                                    st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
+                # Call the fragment
+                device_category_summary_fragment()
 
-                                    st.write(sorted_mode)
-                                    i += 1
+                # st.write("## Device Category Summaries")
+                # st.write("###### * With Outliers")
+                # with st.spinner("Displaying summaries by device category..."):
+                #     st.info("The page will reload to display the summaries by device category. Please wait for the page to reload.")
+                #     progress_bar.progress(70, text='Displaying summaries by device category...')
+                #     logger.info("~~~ Diplaying summaries by device category ~~~")
+                #     categories = data['device_category'].dropna().unique()
+                #     categories.sort()
+                #     with st.form(key='device_mode_category_form'):
+                #         selected_category = st.selectbox('Select Device Category:', options = categories)
+                #         opt_mode_category = st.radio("Would you like to choose a mode category for the selected device category?", ['No', 'Yes'], horizontal=True, captions=['Ignore next dropdown if No', 'Select mode category below'])
+                #         modes = data['mode_category'].dropna().unique()
+                #         modes.sort()
+                #         selected_mode = st.selectbox('Select Mode Category:', options = modes)
+                #         st.session_state['selected_category'] = selected_category
+                #         st.session_state['selected_mode'] = selected_mode
+                #         submit_mode_opt = st.form_submit_button(label='Submit')
+                #         if submit_mode_opt and opt_mode_category == 'Yes':
+                #             filtered_df = df[(df['device_category'] == st.session_state['selected_category']) & (df['mode_category'] == st.session_state['selected_mode'])]
+                #             if filtered_df.empty:
+                #                 st.warning(f"No data found for device category '{st.session_state['selected_category']}' and mode category '{st.session_state['selected_mode']}'.")
+                #             else:
+                #                 st.write(f"### 1. Histograms for {st.session_state['selected_category']} with Mode Category {st.session_state['selected_mode']}")
+                #                 cat_plot = plot_histograms_by_device_category(df, st.session_state['selected_category'], st.session_state['selected_mode'])
+                #                 st.pyplot(cat_plot)
 
-                                encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
-                                vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
-                                vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
-                                vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
-                                vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
+                #                 st.write(f"### 2. Summary for {st.session_state['selected_category']} with Mode Category {st.session_state['selected_mode']}")
+                #                 cat_data = df[(df['device_category'] == st.session_state['selected_category']) & (df['mode_category'] == st.session_state['selected_mode'])]
+                #                 cat_summary = cat_data.describe()
+                #                 st.write(cat_summary)
+
+                #                 i = 3
+                #                 device_cat_count = cat_data.groupby(['device_category', 'device_name']).size().reset_index(name='count')
+                #                 sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
+                #                 if not sorted_dev.empty:
+                #                     st.write(f"### {i}. Device Name to Device Category Mapping for {st.session_state['selected_category']}")
+                #                     st.write(sorted_dev)
+                #                     i += 1
+
+                #                 # st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
+                #                 mode_cat_count = cat_data.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
+                #                 sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
+                #                 if not sorted_mode.empty:
+                #                     st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
+
+                #                     st.write(sorted_mode)
+                #                     i += 1
+
+                #                 encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
+                #                 vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
+                #                 vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
+                #                 vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
+                #                 vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
                                 
-                                if st.session_state['selected_category'] == 'IMV':
-                                    st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
-                                    initial_mode_choice = (
-                                    vent_resp_tables
-                                    .dropna(subset=['mode_category'])  
-                                    .groupby('hospitalization_id')           
-                                    .apply(lambda x: x.iloc[0])                    
-                                    .groupby('mode_category')          
-                                    .size()
-                                    .rename('count')                            
-                                    )
-                                    st.write(initial_mode_choice)
-                        if submit_mode_opt and opt_mode_category == 'No':
-                            filtered_df = df[df['device_category'] == st.session_state['selected_category']]
-                            if filtered_df.empty:
-                                st.warning(f"No data found for device category '{st.session_state['selected_category']}'.")
-                            else:
-                                st.write(f"### 1. Histograms for {st.session_state['selected_category']}")
-                                cat_plot = plot_histograms_by_device_category(data, st.session_state['selected_category'])
-                                st.pyplot(cat_plot)
+                #                 if st.session_state['selected_category'] == 'IMV':
+                #                     st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
+                #                     initial_mode_choice = (
+                #                     vent_resp_tables
+                #                     .dropna(subset=['mode_category'])  
+                #                     .groupby('hospitalization_id')           
+                #                     .apply(lambda x: x.iloc[0])                    
+                #                     .groupby('mode_category')          
+                #                     .size()
+                #                     .rename('count')                            
+                #                     )
+                #                     st.write(initial_mode_choice)
+                #         if submit_mode_opt and opt_mode_category == 'No':
+                #             filtered_df = df[df['device_category'] == st.session_state['selected_category']]
+                #             if filtered_df.empty:
+                #                 st.warning(f"No data found for device category '{st.session_state['selected_category']}'.")
+                #             else:
+                #                 st.write(f"### 1. Histograms for {st.session_state['selected_category']}")
+                #                 cat_plot = plot_histograms_by_device_category(data, st.session_state['selected_category'])
+                #                 st.pyplot(cat_plot)
 
-                                st.write(f"### 2. Summary for {st.session_state['selected_category']}")
-                                cat_data = df[df['device_category'] == st.session_state['selected_category']]
-                                cat_summary = cat_data.describe()
-                                st.write(cat_summary)
+                #                 st.write(f"### 2. Summary for {st.session_state['selected_category']}")
+                #                 cat_data = df[df['device_category'] == st.session_state['selected_category']]
+                #                 cat_summary = cat_data.describe()
+                #                 st.write(cat_summary)
 
-                                i = 3
-                                device_cat_count = cat_data.groupby(['device_category', 'device_name']).size().reset_index(name='count')
-                                # filtered_dev = device_cat_count[device_cat_count['count'] > 100]
-                                sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
-                                if not sorted_dev.empty:
-                                    st.write(f"### {i}. Device Name to Device Category Mapping for {st.session_state['selected_category']}")
-                                    # st.write("*for counts > 100")
-                                    st.write(sorted_dev)
-                                    i += 1
+                #                 i = 3
+                #                 device_cat_count = cat_data.groupby(['device_category', 'device_name']).size().reset_index(name='count')
+                #                 # filtered_dev = device_cat_count[device_cat_count['count'] > 100]
+                #                 sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
+                #                 if not sorted_dev.empty:
+                #                     st.write(f"### {i}. Device Name to Device Category Mapping for {st.session_state['selected_category']}")
+                #                     # st.write("*for counts > 100")
+                #                     st.write(sorted_dev)
+                #                     i += 1
 
-                                mode_cat_count = cat_data.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
-                                # filtered_mode = mode_cat_count[mode_cat_count['count'] > 100]
-                                sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
-                                if not sorted_mode.empty:
-                                    st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
-                                    # st.write("*for counts > 100")
-                                    st.write(sorted_mode)
-                                    i += 1
+                #                 mode_cat_count = cat_data.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
+                #                 # filtered_mode = mode_cat_count[mode_cat_count['count'] > 100]
+                #                 sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
+                #                 if not sorted_mode.empty:
+                #                     st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
+                #                     # st.write("*for counts > 100")
+                #                     st.write(sorted_mode)
+                #                     i += 1
 
-                                encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
-                                vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
-                                vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
-                                vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
-                                vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
+                #                 encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
+                #                 vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
+                #                 vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
+                #                 vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
+                #                 vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
                                 
-                                if st.session_state['selected_category'] == 'IMV':
-                                    st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
-                                    initial_mode_choice = (
-                                    vent_resp_tables
-                                    .dropna(subset=['mode_category'])  
-                                    .groupby('hospitalization_id')           
-                                    .apply(lambda x: x.iloc[0])                    
-                                    .groupby('mode_category')          
-                                    .size()
-                                    .rename('count')                            
-                                    )
-                                    st.write(initial_mode_choice)
+                #                 if st.session_state['selected_category'] == 'IMV':
+                #                     st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
+                #                     initial_mode_choice = (
+                #                     vent_resp_tables
+                #                     .dropna(subset=['mode_category'])  
+                #                     .groupby('hospitalization_id')           
+                #                     .apply(lambda x: x.iloc[0])                    
+                #                     .groupby('mode_category')          
+                #                     .size()
+                #                     .rename('count')                            
+                #                     )
+                #                     st.write(initial_mode_choice)
                 
                 # Name to Category mappings
                 logger.info("~~~ Mapping ~~~")

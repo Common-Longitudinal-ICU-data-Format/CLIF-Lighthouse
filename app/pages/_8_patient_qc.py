@@ -83,12 +83,10 @@ def show_patient_qc():
                     logger.info("~~~ Validating data types ~~~")
                     data, validation_results = validate_and_convert_dtypes(TABLE, data)
                     validation_df = pd.DataFrame(validation_results, columns=['Column', 'Actual', 'Expected', 'Status'])
-                    mismatch_columns = [row[0] for row in validation_results if row[1] != row[2]]
-                    convert_dtypes = False
+                    mismatch_columns = [row[0] for row in validation_results if row[3] == 'Mismatch']
                     if mismatch_columns:
-                        convert_dtypes = True
-                        qc_summary.append("Some columns have mismatched data types.")
-                        qc_recommendations.append("Some columns have mismatched data types. Please review and convert to the expected data types.")
+                        qc_summary.append(f"Column(s) with mismatched data types: {mismatch_columns}")
+                        qc_recommendations.append(f"Column(s) with mismatched data types: {mismatch_columns}. Please review and convert to the expected data types.")
                     st.write(validation_df)
                     logger.info("Data type validation completed.")
 
