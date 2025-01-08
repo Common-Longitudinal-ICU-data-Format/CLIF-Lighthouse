@@ -33,6 +33,11 @@ def show_patient_qc():
         filetype = st.session_state['filetype']
         filepath = f"{root_location}/rclif/clif_patient.{filetype}"
         filepath = os.path.join(root_location, f'clif_patient.{filetype}')
+        # Sampling option
+        if 'sampling_option' in st.session_state:
+            sampling_rate = st.session_state['sampling_option']
+        else:
+            sampling_rate = 100
 
         logger.info(f"Filepath set to {filepath}")
 
@@ -52,7 +57,18 @@ def show_patient_qc():
                 with st.spinner("Loading data..."):
                     progress_bar.progress(15, text='Loading data...')
                     logger.info("~~~ Loading data ~~~")
-                    data = read_data(filepath, filetype)
+                    
+                    if sampling_rate < 100:
+                        original_data = read_data(filepath, filetype)
+                        try:
+                            frac = sampling_rate/100
+                            data = original_data.sample(frac = frac)
+                        except Exception as e:
+                            st.write(f":red[Error: {e}]")
+        
+                    else:
+                        data = read_data(filepath, filetype)
+
                     logger.info("Data loaded successfully.")
 
 
@@ -61,13 +77,22 @@ def show_patient_qc():
                 st.write(f"## {TABLE} Data Preview")
                 with st.spinner("Loading data preview..."):
                     progress_bar.progress(20, text='Loading data preview...')
-                    total_counts = data.shape[0]
+                    ttl_smpl = "Total"
+                    if sampling_rate < 100:
+                        ttl_smpl = "Sample"
+                        total_counts = original_data.shape[0]
+                        sample_counts = data.shape[0]
+                        st.write(f"Total record count before sampling: {total_counts}")
+                        st.write(f"Sample({sampling_rate}%) record count: {sample_counts}")
+                    else:
+                        total_counts = data.shape[0]
+                        st.write(f"Total record count: {total_counts}")
                     ttl_unique_patients = data['patient_id'].nunique()
                     duplicate_count = data.duplicated().sum()
-                    st.write(f"Total records: {total_counts}")
-                    st.write(f"Total unique patients: {ttl_unique_patients}")
+                    st.write(f"{ttl_smpl} records: {total_counts}")
+                    st.write(f"{ttl_smpl} unique patients: {ttl_unique_patients}")
                     if duplicate_count > 0:
-                        st.write(f"Duplicate records: {duplicate_count}")
+                        st.write(f"{ttl_smpl} duplicate records: {duplicate_count}")
                         qc_summary.append(f"{duplicate_count} duplicate(s) found in the data.")
                         qc_recommendations.append("Duplicate records found. Please review and remove duplicates.")
                     else:
