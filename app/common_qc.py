@@ -19,7 +19,8 @@ from reqd_vars_dtypes import required_variables, expected_data_types
 # logger = logging.getLogger(__name__)
 
 # Common Functions
-def read_data(filepath, filetype):
+
+def read_data(file):
     """
     Read data from file based on file type.
     Parameters:
@@ -28,15 +29,34 @@ def read_data(filepath, filetype):
     Returns:
         DataFrame: DataFrame containing the data.
     """
-    if filetype == 'csv':
-        return pd.read_csv(filepath)
-    elif filetype == 'parquet':
-        table = pq.read_table(filepath)
+    if file.name.endswith(".csv"):
+        return pd.read_csv(file)
+    elif file.name.endswith(".parquet"):
+        table = pq.read_table(file)
         return table.to_pandas()
-    elif filetype == 'fst':
-        return pd.read_fwf(filepath)
+    elif file.name.endswith(".fst"):
+        return pd.read_fwf(file)
     else:
         raise ValueError("Unsupported file type. Please provide either 'csv', 'fst' or 'parquet'.")
+    
+# def read_data(filepath, filetype):
+#     """
+#     Read data from file based on file type.
+#     Parameters:
+#         filepath (str): Path to the file.
+#         filetype (str): Type of the file ('csv' or 'parquet').
+#     Returns:
+#         DataFrame: DataFrame containing the data.
+#     """
+#     if filetype == 'csv':
+#         return pd.read_csv(filepath)
+#     elif filetype == 'parquet':
+#         table = pq.read_table(filepath)
+#         return table.to_pandas()
+#     elif filetype == 'fst':
+#         return pd.read_fwf(filepath)
+#     else:
+#         raise ValueError("Unsupported file type. Please provide either 'csv', 'fst' or 'parquet'.")
 
 def check_required_variables(table_name, df): ### Modified from original
     """
@@ -329,14 +349,15 @@ def name_category_mapping(data):
             mappings.append(frequency)
     return mappings
 
-def check_time_overlap(data, root_location, filetype):
+def check_time_overlap(data, session):
     try:
         # Check if 'patient_id' exists in the data
         if 'patient_id' not in data.columns:
-            hospitalization_path = os.path.join(root_location, f'clif_hospitalization.{filetype}')
-            hospitalization_table = read_data(hospitalization_path, filetype)
-            if hospitalization_table is None:
-                raise ValueError("patient_id is missing, and the hospitalization table is not provided.")
+            if "clif_hospitalization" not in session:
+                error = "patient_id is missing, and the hospitalization table is not provided."
+                return error
+            
+            hospitalization_table = session["clif_hospitalization"]
             
             # Join adt_table with hospitalization_table to get patient_id
             data = data.merge(
@@ -347,7 +368,8 @@ def check_time_overlap(data, root_location, filetype):
             
             # Check if the join was successful
             if 'patient_id' not in data.columns or data['patient_id'].isnull().all():
-                raise ValueError("Unable to retrieve patient_id after joining with hospitalization_table.")
+                error = "Unable to retrieve patient_id after joining with hospitalization_table."
+                return error
         
         
         # Sort by patient_id and in_dttm to make comparisons easier
@@ -382,25 +404,4 @@ def check_time_overlap(data, root_location, filetype):
         # Handle errors gracefully
         raise RuntimeError(f"Error checking time overlap: {str(e)}")
 
-def fix_overlaps(data, overlapping_patient_ids):
-    """
-    Fix overlaps only for the specified patient IDs with detected overlaps.
-    """
-    # Filter only relevant patients with detected overlaps
-    data = data[data['patient_id'].isin(overlapping_patient_ids)]
 
-    # Sort the data to ensure chronological order for adjustments
-    data = data.sort_values(by=['patient_id', 'in_dttm'])
-
-    # Iterate over each patient’s data to fix overlaps
-    for patient_id, group in data.groupby('patient_id'):
-        for i in range(len(group) - 1):
-            current_idx = group.index[i]
-            next_idx = group.index[i + 1]
-
-            # If there's an overlap, adjust the current out_dttm
-            if data.loc[current_idx, 'out_dttm'] > data.loc[next_idx, 'in_dttm']:
-                # Set the out_dttm to just before the next in_dttm
-                data.loc[current_idx, 'out_dttm'] = data.loc[next_idx, 'in_dttm'] - pd.Timedelta(minutes=1)
-
-    return data

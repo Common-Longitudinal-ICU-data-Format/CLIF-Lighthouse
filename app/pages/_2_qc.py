@@ -1,7 +1,9 @@
 import streamlit as st
 import logging
+import os
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
+from common_qc import read_data
 from pages._3_adt_qc import show_adt_qc
 from pages._4_hosp_qc import show_hosp_qc
 from pages._5_labs_qc import show_labs_qc
@@ -26,11 +28,11 @@ def show_qc():
     with main_qc_form:
         st.title("Quality Controls")
         with st.form(key='main_form', clear_on_submit=False):
-        # Root location input
-            root_location = st.text_input("Enter root location to proceed")   
-
-            # File type selection
-            filetype = st.selectbox("File type", ["", "csv", "parquet", "fst"], format_func=lambda x: "Select..." if x == "" else x)
+            files = st.file_uploader(
+                "Select one or more files", 
+                accept_multiple_files=True, 
+                type=["csv", "parquet", "fst"]
+            )
 
             # Sampling option
             s_col1, _, _, _ = st.columns(4)
@@ -47,19 +49,17 @@ def show_qc():
                     icon="ℹ️")
         
         # Store user inputs in session_state
-        if root_location:
-            logger.info(f"Root location entered: {root_location}")
-            st.session_state['root_location'] = root_location
+        if files:
+            for file in files:
+                df = read_data(file)
+                table_name = file.name.split('.')[0]
+                st.session_state[table_name] = df
 
-        if filetype:
-            logger.info(f"File type selected: {filetype}")
-            st.session_state['filetype'] = filetype
-        
         if sampling_option:
             logger.info(f"Sampling option selected: {sampling_option}")
             st.session_state['sampling_option'] = sampling_option
 
-        if root_location and filetype:
+        if submit:
             tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
                 "Hospitalization", "Labs", "Medication", "Microbiology", "Patient", 
                 "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
