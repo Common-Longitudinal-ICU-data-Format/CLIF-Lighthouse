@@ -1,13 +1,17 @@
 import streamlit as st
 import pandas as pd
-import os
 import logging
 import time
-from common_qc import read_data, check_required_variables, check_categories_exist
+from common_qc import check_required_variables, check_categories_exist
 from common_qc import replace_outliers_with_na_long, generate_facetgrid_histograms, generate_summary_stats
-from common_qc import validate_and_convert_dtypes, name_category_mapping
+from common_qc import validate_and_convert_dtypes, name_category_mapping, read_data
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from io import BytesIO
 
 def show_vitals_qc():
     '''
@@ -20,6 +24,7 @@ def show_vitals_qc():
 
     # Page title
     TABLE = "Vitals"
+    table = "clif_vitals"
     st.title(f"{TABLE} Quality Check")
 
     logger.info(f"!!! Starting QC for {TABLE}.")
@@ -28,23 +33,16 @@ def show_vitals_qc():
     qc_summary = []
     qc_recommendations = []
 
-    if 'root_location' in st.session_state and 'filetype' in st.session_state:
-        root_location = st.session_state['root_location']
-        filetype = st.session_state['filetype']
-        filepath = os.path.join(root_location, f'clif_vitals.{filetype}')
-
+    if table in st.session_state:
+        
         # Sampling option
         if 'sampling_option' in st.session_state:
             sampling_rate = st.session_state['sampling_option']
         else:
             sampling_rate = 100
 
-        logger.info(f"Filepath set to {filepath}")
-
-        if os.path.exists(filepath):
             st.info("Significant load time for Vitals QC. Please be patient.", icon="ℹ️")
             progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
-            logger.info(f"File {filepath} exists.")
 
             # Start time
             start_time = time.time()
@@ -61,7 +59,7 @@ def show_vitals_qc():
                     logger.info("~~~ Loading data ~~~")
 
                     if sampling_rate < 100:
-                        original_data = read_data(filepath, filetype)
+                        original_data = st.session_state[table]
                         try:
                             frac = sampling_rate/100
                             data = original_data.sample(frac = frac)
@@ -69,7 +67,7 @@ def show_vitals_qc():
                             st.write(f":red[Error: {e}]")
         
                     else:
-                        data = read_data(filepath, filetype)
+                        data = st.session_state[table]
 
                     df = data.copy()
                     logger.info("Data loaded successfully.")
@@ -255,12 +253,36 @@ def show_vitals_qc():
 
             logger.info("QC Summary and Recommendations displayed.")
 
-        else:
-            st.write(f"File not found. Please provide the correct root location and file type to proceed.")
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            story = []
+            
+            # Title
+            story.append(Paragraph("Vital Signs Quality Control Report"))
+            story.append(Spacer(1, 12))
+            
+            # Vitals-specific sections
+            if 'vital_types' in locals():
+                story.append(Paragraph("Vital Signs Types Analysis"))
+                # Add vital signs type distribution
+                
+            if 'range_analysis' in locals():
+                story.append(Paragraph("Vital Signs Range Analysis"))
+                # Add range analysis for each vital sign
+                
+            if 'frequency_analysis' in locals():
+                story.append(Paragraph("Measurement Frequency Analysis"))
+                # Add frequency analysis
+            
+            # Build and return PDF
+            doc.build(story)
+            pdf_value = buffer.getvalue()
+            buffer.close()
+            return pdf_value
 
     else:
-        st.write("Please provide the root location and file type to proceed.")
-        logger.warning("Root location and/or file type not provided.")
+        st.write(f"Please upload {TABLE} data to proceed.")
+        logger.warning(f"Please upload {TABLE} data to proceed.")
 
-    logger.info(f"!!! Completed QC for {TABLE}.")       
+    logger.info(f"!!! Completed QC for {TABLE}.")  
 

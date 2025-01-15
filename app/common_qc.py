@@ -4,19 +4,13 @@ import pyarrow.parquet as pq
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
-import os
 from fuzzywuzzy import fuzz 
 from logging_config import setup_logging
-from common_features import set_bg_hack_url
 from reqd_vars_dtypes import required_variables, expected_data_types
 
-# pages_layout()
-# set_bg_hack_url()
-# set_sidebar()
-
 # Initialize logger
-# setup_logging()
-# logger = logging.getLogger(__name__)
+setup_logging()
+logger = logging.getLogger(__name__)
 
 # Common Functions
 
@@ -39,25 +33,6 @@ def read_data(file):
     else:
         raise ValueError("Unsupported file type. Please provide either 'csv', 'fst' or 'parquet'.")
     
-# def read_data(filepath, filetype):
-#     """
-#     Read data from file based on file type.
-#     Parameters:
-#         filepath (str): Path to the file.
-#         filetype (str): Type of the file ('csv' or 'parquet').
-#     Returns:
-#         DataFrame: DataFrame containing the data.
-#     """
-#     if filetype == 'csv':
-#         return pd.read_csv(filepath)
-#     elif filetype == 'parquet':
-#         table = pq.read_table(filepath)
-#         return table.to_pandas()
-#     elif filetype == 'fst':
-#         return pd.read_fwf(filepath)
-#     else:
-#         raise ValueError("Unsupported file type. Please provide either 'csv', 'fst' or 'parquet'.")
-
 def check_required_variables(table_name, df): ### Modified from original
     """
     Check if all required variables exist in the DataFrame.
@@ -104,6 +79,8 @@ def generate_summary_stats(data, category_column, value_column):
     return summary_stats
 
 def find_closest_match(label, labels):
+    """
+    """
     closest_label = None
     highest_similarity = -1
     for lab_label in labels:

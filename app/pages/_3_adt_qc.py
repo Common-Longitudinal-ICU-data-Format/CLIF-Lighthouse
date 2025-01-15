@@ -6,6 +6,11 @@ from common_qc import check_required_variables, check_time_overlap
 from common_qc import validate_and_convert_dtypes, name_category_mapping
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from io import BytesIO
 
 def show_adt_qc():
     '''
@@ -35,11 +40,8 @@ def show_adt_qc():
         else:
             sampling_rate = 100
 
-        # logger.info(f"Filepath set to {filepath}")
 
-    
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
-        # logger.info(f"File {filepath} exists.")
 
         # Start time
         start_time = time.time()
@@ -118,6 +120,7 @@ def show_adt_qc():
                 progress_bar.progress(40, text='Checking for missing values...')
                 logger.info("~~~ Checking for missing values ~~~")
                 missing_counts = data.isnull().sum()
+                missingness_summary = ""  # Store the summary temporarily
                 if missing_counts.any():
                     missing_percentages = (missing_counts / total_counts) * 100
                     missing_info = pd.DataFrame({
@@ -126,12 +129,15 @@ def show_adt_qc():
                     })
                     missing_info_sorted = missing_info.sort_values(by='Missing Count', ascending=False)
                     st.write(missing_info_sorted)
-                    qc_summary.append("Missing values found in columns - " + ', '.join(missing_info[missing_info['Missing Count'] > 0].index.tolist()))
+                    columns_with_missing = missing_info[missing_info['Missing Count'] > 0]
+                    missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
+                    for idx, row in columns_with_missing.iterrows():
+                        missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
                 else:
                     st.write("No missing values found in all required columns.")
+                    missingness_summary = "No missing values found in any columns."
                 logger.info("Checked for missing values.")
 
-        
             # Check for required columns    
             logger.info("~~~ Checking for required columns ~~~")  
             st.write(f"## {TABLE} Required Columns")
@@ -154,13 +160,13 @@ def show_adt_qc():
                 reqd_categories = pd.DataFrame(["ER", "OR", "ICU", "Ward", "Other"], 
                                     columns=['location_category'])
                 categories = data['location_category'].unique()
+                missing_cats = []
                 if reqd_categories['location_category'].tolist().sort() == categories.tolist().sort():
                     st.write("All location categories are present.")
                     qc_summary.append("All location categories are present.")
                     logger.info("All location categories are present.")
                 else:
                     st.write("Some location categories are missing.")
-                    missing_cats = []
                     for cat in reqd_categories['location_category']:
                         if cat not in categories:
                             st.write(f"{cat} is missing.")
@@ -209,6 +215,10 @@ def show_adt_qc():
                 else:
                     st.write("No overlapping admissions found.")
                     qc_summary.append("No overlapping admissions found.")
+            
+
+            # Move this line to after all other QC checks (just before displaying QC Summary)
+            qc_summary.append(missingness_summary)  # Add this line just before "# Display QC Summary and Recommendations"
 
             progress_bar.progress(100, text='Quality check completed. Displaying results...')
             
@@ -233,6 +243,155 @@ def show_adt_qc():
                 st.markdown(f"{i + 1}. {recommendation}")
 
         logger.info("QC Summary and Recommendations displayed.")
+
+        # Create PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        story = []
+        styles = getSampleStyleSheet()
+        title_style = styles['Heading1']
+        heading2_style = styles['Heading2']
+        normal_style = styles['Normal']
+        
+        # Title
+        story.append(Paragraph("ADT Quality Control Report", title_style))
+        story.append(Spacer(1, 12))
+        
+        # Data Overview
+        story.append(Paragraph("Data Overview", heading2_style))
+        if 'sampling_option' in st.session_state:
+            story.append(Paragraph(f"Total record count before sampling: {total_counts}", normal_style))
+            story.append(Paragraph(f"Sample({sampling_rate}%) record count: {sample_counts}", normal_style))
+        else:
+            story.append(Paragraph(f"Total record count: {total_counts}", normal_style))
+        story.append(Paragraph(f"Total unique hospital encounters: {ttl_unique_encounters}", normal_style))
+        if duplicate_count > 0:
+            story.append(Paragraph(f"Duplicate records: {duplicate_count}", normal_style))
+        else:
+            story.append(Paragraph("No duplicate records found.", normal_style))
+        story.append(Spacer(1, 12))
+        
+        # Data Type Validation
+        story.append(Paragraph("Data Type Validation", heading2_style))
+        validation_data = [
+            [Paragraph(str(cell), normal_style) for cell in ['Column', 'Actual', 'Expected', 'Status']]
+        ]
+        for row in validation_results:
+            validation_data.append([Paragraph(str(cell), normal_style) for cell in row])
+        t = Table(validation_data)
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(t)
+        story.append(Spacer(1, 12))
+        
+        # Missingness
+        story.append(Paragraph("Missingness", heading2_style))
+        if missing_counts.any():
+            # Create table data for missing values
+            missing_data = [['Column', 'Missing Count', 'Missing Percentage']]
+            for col in missing_info_sorted.index:
+                missing_data.append([
+                    col,
+                    str(missing_info_sorted.loc[col, 'Missing Count']),
+                    missing_info_sorted.loc[col, 'Missing Percentage']
+                ])
+            
+            # Create and style the table
+            t = Table(missing_data)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(t)
+        else:
+            story.append(Paragraph("No missing values found in all required columns.", normal_style))
+        story.append(Spacer(1, 12))
+        
+        # Required Columns
+        story.append(Paragraph(f"{TABLE} Required Columns", heading2_style))
+        story.append(Paragraph(str(required_cols_check), normal_style))
+        story.append(Spacer(1, 12))
+
+        # Check for presence of all location categories
+        story.append(Paragraph("Presence of all location categories", heading2_style))
+        if missing_cats:
+            story.append(Paragraph("Some location categories are missing.", normal_style))
+            for i, missing in enumerate(missing_cats, start=1):
+                story.append(Paragraph(f"{i}. {missing}", normal_style))
+        else:
+            story.append(Paragraph("All location categories are present.", normal_style))
+        story.append(Spacer(1, 12))
+
+        # Name to Category Mapping
+        story.append(Paragraph("Name to Category Mapping", heading2_style))
+        for mapping in mappings:
+            mapping_name = mapping.columns[0]
+            mapping_cat = mapping.columns[1]
+            story.append(Paragraph(f"Mapping {mapping_name} to {mapping_cat}:", normal_style))
+            mapping_data = [
+                [Paragraph(str(cell), normal_style) for cell in mapping.columns.tolist()]
+            ]
+            for row in mapping.values:
+                mapping_data.append([Paragraph(str(cell), normal_style) for cell in row])
+            t = Table(mapping_data)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 12))
+        
+        # Overlapping Admissions
+        story.append(Paragraph("Overlapping Admissions", heading2_style))
+        if isinstance(overlaps, str):
+            story.append(Paragraph(overlaps, normal_style))
+        elif isinstance(overlaps, list) and len(overlaps) > 0:
+            overlaps_df = pd.DataFrame(overlaps)
+            overlap_data = [
+                [Paragraph(str(cell), normal_style) for cell in overlaps_df.columns.tolist()]
+            ]
+            for row in overlaps_df.values:
+                overlap_data.append([Paragraph(str(cell), normal_style) for cell in row])
+            t = Table(overlap_data)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(t)
+        else:
+            story.append(Paragraph("No overlapping admissions found.", normal_style))
+        story.append(Spacer(1, 12))
+        
+        # Summary and Recommendations
+        story.append(Paragraph("QC Summary", heading2_style))
+        for point in qc_summary:
+            story.append(Paragraph(f"• {point}", normal_style))
+        story.append(Spacer(1, 12))
+        
+        if qc_recommendations:
+            story.append(Paragraph("Recommendations", heading2_style))
+            for rec in qc_recommendations:
+                story.append(Paragraph(f"• {rec}", normal_style))
+        
+        # Build the PDF
+        doc.build(story)
+        pdf_value = buffer.getvalue()
+        buffer.close()
+        return pdf_value
 
     else:
         st.write(f"Please upload {TABLE} data to proceed.")
