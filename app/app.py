@@ -71,11 +71,8 @@ def show_home():
             s_col1, _, _, _ = st.columns(4)
             with s_col1:
                 sampling_option = st.number_input("Set dataset sample(%) for QC ***(optional)***", min_value=1, max_value=100, value=None, step=5)
-            download_option = st.radio("Automate download of generated tables and images ***(optional)***",
-                                        ["Yes", "No"],
-                                        index = None)
-            if download_option == "Yes":
-                download_path = st.text_input("Enter the download path for the files")
+            download_path = st.text_input("Automate download of generated tables and images ***(optional)***",
+                                        "Enter folder path to save downloads...")
 
             submit = st.form_submit_button(label='Submit')
 
@@ -98,9 +95,8 @@ def show_home():
                 if sampling_option:
                     logger.info(f"Sampling option selected: {sampling_option}")
                     st.session_state['sampling_option'] = sampling_option
-                if download_option:
-                    logger.info(f"Download option selected: {download_option}")
-                    st.session_state['download_option'] = download_option
+                if download_path:
+                    logger.info(f"Download path option selected: {download_path}")
                     st.session_state['download_path'] = download_path
 
             logger.info("Loading QC results page")

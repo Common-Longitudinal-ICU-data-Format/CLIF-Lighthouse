@@ -197,43 +197,6 @@ def show_microbio_qc():
 
         logger.info("QC Summary and Recommendations displayed.")
 
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        story = []
-        styles = getSampleStyleSheet()
-        title_style = styles['Heading1']
-        heading2_style = styles['Heading2']
-        normal_style = styles['Normal']
-        
-        # Title
-        story.append(Paragraph("Microbiology Quality Control Report", title_style))
-        story.append(Spacer(1, 12))
-        
-        # Data Overview
-        story.append(Paragraph("Data Overview", heading2_style))
-        if sampling_rate < 100:
-            story.append(Paragraph(f"Total record count before sampling: {total_counts}", normal_style))
-            story.append(Paragraph(f"Sample({sampling_rate}%) record count: {sample_counts}", normal_style))
-        else:
-            story.append(Paragraph(f"Total record count: {total_counts}", normal_style))
-        story.append(Paragraph(f"Total unique tests: {ttl_unique_encounters}", normal_style))
-        story.append(Paragraph(f"Duplicate records: {duplicate_count}", normal_style))
-        
-        # Microbiology-specific sections
-        if 'organism_analysis' in locals():
-            story.append(Paragraph("Organism Distribution Analysis", heading2_style))
-            # Add organism distribution data
-            
-        if 'sensitivity_analysis' in locals():
-            story.append(Paragraph("Antibiotic Sensitivity Analysis", heading2_style))
-            # Add sensitivity analysis data
-        
-        # Build and return PDF
-        doc.build(story)
-        pdf_value = buffer.getvalue()
-        buffer.close()
-        return pdf_value
-
     else:
         st.write(f"Please upload {TABLE} data to proceed.")
         logger.warning(f"Please upload {TABLE} data to proceed.")

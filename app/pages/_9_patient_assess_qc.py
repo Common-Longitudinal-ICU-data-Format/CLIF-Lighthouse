@@ -187,30 +187,6 @@ def show_patient_assess_qc():
 
         logger.info("QC Summary and Recommendations displayed.")
 
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        story = []
-        styles = getSampleStyleSheet()
-        
-        # Title
-        story.append(Paragraph("Patient Assessment Quality Control Report", styles['Heading1']))
-        story.append(Spacer(1, 12))
-        
-        # Assessment-specific sections
-        if 'assessment_types' in locals():
-            story.append(Paragraph("Assessment Types Analysis", styles['Heading2']))
-            # Add assessment type distribution
-            
-        if 'assessment_frequency' in locals():
-            story.append(Paragraph("Assessment Frequency Analysis", styles['Heading2']))
-            # Add frequency analysis
-        
-        # Build and return PDF
-        doc.build(story)
-        pdf_value = buffer.getvalue()
-        buffer.close()
-        return pdf_value
-
     else:
         st.write(f"Please upload {TABLE} data to proceed.")
         logger.warning(f"Please upload {TABLE} data to proceed.")

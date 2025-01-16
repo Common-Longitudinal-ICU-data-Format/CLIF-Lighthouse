@@ -185,33 +185,6 @@ def show_patient_qc():
 
         logger.info("QC Summary and Recommendations displayed.")
 
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        story = []
-        styles = getSampleStyleSheet()
-        title_style = styles['Heading1']
-        heading2_style = styles['Heading2']
-        normal_style = styles['Normal']
-        
-        # Title
-        story.append(Paragraph("Patient Demographics Quality Control Report", title_style))
-        story.append(Spacer(1, 12))
-        
-        # Demographics-specific sections
-        if 'age_distribution' in locals():
-            story.append(Paragraph("Age Distribution Analysis", heading2_style))
-            # Add age distribution data
-            
-        if 'gender_distribution' in locals():
-            story.append(Paragraph("Gender Distribution Analysis", heading2_style))
-            # Add gender distribution data
-        
-        # Build and return PDF
-        doc.build(story)
-        pdf_value = buffer.getvalue()
-        buffer.close()
-        return pdf_value
-
     else:
         st.write(f"Please upload {TABLE} data to proceed.")
         logger.warning(f"Please upload {TABLE} data to proceed.")

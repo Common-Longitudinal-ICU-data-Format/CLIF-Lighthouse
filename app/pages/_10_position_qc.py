@@ -185,30 +185,6 @@ def show_position_qc():
 
         logger.info("QC Summary and Recommendations displayed.")
 
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        story = []
-        styles = getSampleStyleSheet()
-        
-        # Title
-        story.append(Paragraph("Patient Position Quality Control Report"))
-        story.append(Spacer(1, 12))
-        
-        # Position-specific sections
-        if 'position_types' in locals():
-            story.append(Paragraph("Position Types Distribution"))
-            # Add position type distribution
-            
-        if 'position_frequency' in locals():
-            story.append(Paragraph("Position Change Frequency"))
-            # Add frequency analysis
-        
-        # Build and return PDF
-        doc.build(story)
-        pdf_value = buffer.getvalue()
-        buffer.close()
-        return pdf_value
-
     else:
         st.write(f"Please upload {TABLE} data to proceed.")
         logger.warning(f"Please upload {TABLE} data to proceed.")

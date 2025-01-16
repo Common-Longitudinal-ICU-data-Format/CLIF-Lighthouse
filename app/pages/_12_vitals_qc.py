@@ -253,33 +253,6 @@ def show_vitals_qc():
 
             logger.info("QC Summary and Recommendations displayed.")
 
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=letter)
-            story = []
-            
-            # Title
-            story.append(Paragraph("Vital Signs Quality Control Report"))
-            story.append(Spacer(1, 12))
-            
-            # Vitals-specific sections
-            if 'vital_types' in locals():
-                story.append(Paragraph("Vital Signs Types Analysis"))
-                # Add vital signs type distribution
-                
-            if 'range_analysis' in locals():
-                story.append(Paragraph("Vital Signs Range Analysis"))
-                # Add range analysis for each vital sign
-                
-            if 'frequency_analysis' in locals():
-                story.append(Paragraph("Measurement Frequency Analysis"))
-                # Add frequency analysis
-            
-            # Build and return PDF
-            doc.build(story)
-            pdf_value = buffer.getvalue()
-            buffer.close()
-            return pdf_value
-
     else:
         st.write(f"Please upload {TABLE} data to proceed.")
         logger.warning(f"Please upload {TABLE} data to proceed.")
