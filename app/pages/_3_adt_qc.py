@@ -6,11 +6,7 @@ from common_qc import check_required_variables, check_time_overlap
 from common_qc import validate_and_convert_dtypes, name_category_mapping
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
+import os
 
 def show_adt_qc():
     '''
@@ -32,14 +28,16 @@ def show_adt_qc():
     qc_summary = []
     qc_recommendations = []
 
-
     if table in st.session_state:
         # Sampling option
         if 'sampling_option' in st.session_state:
             sampling_rate = st.session_state['sampling_option']
         else:
             sampling_rate = 100
-
+        
+        # Check if download path is provided
+        if 'download_path' in st.session_state:
+            download_path = st.session_state['download_path']
 
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
 
@@ -113,6 +111,13 @@ def show_adt_qc():
                 st.write(validation_df)
                 logger.info("Data type validation completed.")
 
+
+                # Save validation results to CSV
+                validation_results_csv = validation_df.to_csv(index=False)
+                with open(os.path.join(download_path, f"{TABLE}_validation_results.csv"), 'w') as file:
+                    file.write(validation_results_csv)
+                logger.info(f"Validation results saved to {download_path}/{TABLE}_validation_results.csv")
+
             
             # Display missingness for each column
             st.write(f"## Missingness")
@@ -133,11 +138,17 @@ def show_adt_qc():
                     missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
                     for idx, row in columns_with_missing.iterrows():
                         missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
+                    # Save missingness information to CSV
+                    missing_info_sorted_csv = missing_info_sorted.to_csv(index=False)
+                    with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                        file.write(missing_info_sorted_csv)
+                    logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")
                 else:
                     st.write("No missing values found in all required columns.")
                     missingness_summary = "No missing values found in any columns."
                 logger.info("Checked for missing values.")
 
+            
             # Check for required columns    
             logger.info("~~~ Checking for required columns ~~~")  
             st.write(f"## {TABLE} Required Columns")
@@ -150,7 +161,6 @@ def show_adt_qc():
                     qc_recommendations.append("Some required columns are missing. Please ensure all required columns are present.")  
                     logger.warning("Some required columns are missing.")
                 logger.info("Checked for required columns.")
-
 
             # Check for presence of all location categories
             logger.info("~~~ Checking for presence of all location categories ~~~")
@@ -195,6 +205,13 @@ def show_adt_qc():
                     st.write(mapping.reset_index().drop("index", axis = 1))
                     n += 1
                 
+                # Save mappings to CSV
+                mappings_csv = pd.concat(mappings).reset_index().drop("index", axis = 1).to_csv(index=False)
+                with open(os.path.join(download_path, f"{TABLE}_mappings.csv"), 'w') as file:
+                    file.write(mappings_csv)
+                logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_mappings.csv")
+
+            
             # Check for Concurrent Admissions
             logger.info("~~~ Checking for Overlapping Admissions ~~~")
             st.write('## Checking for Overlapping Admissions')
@@ -209,14 +226,19 @@ def show_adt_qc():
                         st.write(overlaps_df)
                         qc_summary.append("There appears to be overlapping admissions to different locations.")
                         qc_recommendations.append("Please revise patient out_dttms to reflect appropriately.")
+                        # Save overlaps to CSV
+                        overlaps_df_csv = overlaps_df.to_csv(index=False)
+                        with open(os.path.join(download_path, f"{TABLE}_overlapping_admissions.csv"), 'w') as file:
+                            file.write(overlaps_df_csv)
+                        logger.info(f"Overlapping Admissions saved to {download_path}/{TABLE}_overlapping_admissions.csv")
                     except Exception as e:
                         st.error(f"Error creating overlaps DataFrame: {str(e)}")
                         logger.error(f"Error creating overlaps DataFrame: {str(e)}")
                 else:
                     st.write("No overlapping admissions found.")
                     qc_summary.append("No overlapping admissions found.")
-            
 
+            
             # Move this line to after all other QC checks (just before displaying QC Summary)
             qc_summary.append(missingness_summary)  # Add this line just before "# Display QC Summary and Recommendations"
 
