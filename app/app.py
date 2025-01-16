@@ -71,7 +71,12 @@ def show_home():
             s_col1, _, _, _ = st.columns(4)
             with s_col1:
                 sampling_option = st.number_input("Set dataset sample(%) for QC ***(optional)***", min_value=1, max_value=100, value=None, step=5)
-    
+            download_option = st.radio("Automate download of generated tables and images ***(optional)***",
+                                        ["Yes", "No"],
+                                        index = None)
+            if download_option == "Yes":
+                download_path = st.text_input("Enter the download path for the files")
+
             submit = st.form_submit_button(label='Submit')
 
         if submit:
@@ -93,6 +98,10 @@ def show_home():
                 if sampling_option:
                     logger.info(f"Sampling option selected: {sampling_option}")
                     st.session_state['sampling_option'] = sampling_option
+                if download_option:
+                    logger.info(f"Download option selected: {download_option}")
+                    st.session_state['download_option'] = download_option
+                    st.session_state['download_path'] = download_path
 
             logger.info("Loading QC results page")
             tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
@@ -100,109 +109,34 @@ def show_home():
                 "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
 
             with tab1:
-                tab1_results = show_adt_qc()
-                if tab1_results is not None:
-                    st.download_button(
-                        label="Download ADT QC Report",
-                        data=tab1_results,
-                        file_name="adt_qc_report.pdf",
-                        mime="application/pdf"
-                    )
+                show_adt_qc()
 
             with tab2:
-                tab2_results = show_hosp_qc()
-                if tab2_results is not None:
-                    st.download_button(
-                        label="Download Hospitalization QC Report",
-                        data=tab2_results,
-                        file_name="hosp_qc_report.pdf",
-                        mime="application/pdf"
-                    )
+                show_hosp_qc()
 
             with tab3:
-                tab3_results = show_labs_qc()
-                if tab3_results is not None:
-                    st.download_button(
-                        label="Download Labs QC Report",
-                        data=tab3_results,
-                        file_name="labs_qc_report.pdf",
-                        mime="application/pdf"
-                    )
+                show_labs_qc()
 
             with tab4:
-                tab4_results = show_meds_qc()
-                if tab4_results is not None:
-                    st.download_button(
-                        label="Download Medications QC Report",
-                        data=tab4_results,
-                        file_name="meds_qc_report.pdf",
-                        mime="application/pdf"
-                    )
+                show_meds_qc()
 
             with tab5:
-                tab5_results = show_microbio_qc()
-                if tab5_results is not None:
-                    st.download_button(
-                        label="Download Microbiology QC Report",
-                        data=tab5_results,
-                        file_name="micro_qc_report.pdf",
-                        mime="application/pdf"
-                    )
+                show_microbio_qc()
 
             with tab6:
-                tab6_results = show_patient_qc()
-                tab6_results
-                # if tab6_results is not None:
-                #     st.download_button(
-                #         label="Download Patient QC Report",
-                #         data=tab6_results,
-                #         file_name="patient_qc_report.pdf",
-                #         mime="application/pdf"
-                #     )
+                show_patient_qc()
 
             with tab7:
-                tab7_results = show_patient_assess_qc()
-                tab7_results
-                # if tab7_results is not None:
-                #     st.download_button(
-                #         label="Download Patient Assessment QC Report",
-                #         data=tab7_results,
-                #         file_name="pat_assess_qc_report.pdf",
-                #         mime="application/pdf"
-                #     )
+                show_patient_assess_qc()
 
             with tab8:
-                tab8_results = show_position_qc()
-                tab8_results
-                # if tab8_results is not None:
-                #     st.download_button(
-                #         label="Download Position QC Report",
-                #         data=tab8_results,
-                #         file_name="position_qc_report.pdf",
-                #         mime="application/pdf"
-                #     )
+                show_position_qc()
 
             with tab9:
-                tab9_results = show_respiratory_support_qc()
-                tab9_results
-                # if tab9_results is not None:
-                #     st.download_button(
-                #         label="Download Respiratory Support QC Report",
-                #         data=tab9_results,
-                #         file_name="resp_qc_report.pdf",
-                #         mime="application/pdf"
-                #     )
+                show_respiratory_support_qc()
 
             with tab10:
-                tab10_results = show_vitals_qc()
-                tab10_results
-                # if tab10_results is not None:
-                #     st.download_button(
-                #         label="Download Vitals QC Report",
-                #         data=tab10_results,
-                #         file_name="vitals_qc_report.pdf",
-                #         mime="application/pdf"
-                #     )
+                show_vitals_qc()
 
   
 parent_dir = os.path.dirname(os.path.abspath(__file__))
