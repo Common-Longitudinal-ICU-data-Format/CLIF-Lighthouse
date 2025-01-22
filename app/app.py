@@ -71,8 +71,7 @@ def show_home():
             s_col1, _, _, _ = st.columns(4)
             with s_col1:
                 sampling_option = st.number_input("Set dataset sample(%) for QC ***(optional)***", min_value=1, max_value=100, value=None, step=5)
-            download_path = st.text_input("Automate download of generated tables and images ***(optional)***",
-                                        "Enter folder path to save downloads...")
+            download_path = st.text_input("Enter path to save automated downloads of generated tables and images ***(optional)***", value=None)
 
             submit = st.form_submit_button(label='Submit')
 
@@ -92,9 +91,12 @@ def show_home():
                         st.write("Error: No files were submitted or an issue occurred while processing the files.")
                         st.write(f"Details: {e}")
 
+                st.session_state['sampling_option'] = None
                 if sampling_option:
                     logger.info(f"Sampling option selected: {sampling_option}")
                     st.session_state['sampling_option'] = sampling_option
+                
+                st.session_state['download_path'] = None
                 if download_path:
                     logger.info(f"Download path option selected: {download_path}")
                     st.session_state['download_path'] = download_path
