@@ -2,17 +2,13 @@ import streamlit as st
 import pandas as pd
 import logging
 import time
+import os
 from common_qc import read_data, check_required_variables, check_categories_exist
 from common_qc import replace_outliers_with_na_long, generate_facetgrid_histograms
 from common_qc import validate_and_convert_dtypes, generate_summary_stats, name_category_mapping
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
-from reportlab.platypus import Image
+
 
 def show_labs_qc():
     '''
@@ -35,11 +31,6 @@ def show_labs_qc():
     qc_recommendations = []
 
     if table in st.session_state:
-        # Sampling option
-        if 'sampling_option' in st.session_state:
-            sampling_rate = st.session_state['sampling_option']
-        else:
-            sampling_rate = 100
 
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
 
@@ -57,7 +48,10 @@ def show_labs_qc():
                 progress_bar.progress(15, text='Loading data...')
                 logger.info("~~~ Loading data ~~~")
 
-                if sampling_rate < 100:
+                sampling_rate = st.session_state['sampling_option']
+                download_path = st.session_state['download_path'] 
+                
+                if sampling_rate is not None:
                     original_data = st.session_state[table]
                     try:
                         frac = sampling_rate/100
@@ -82,7 +76,7 @@ def show_labs_qc():
                 ttl_unique_encounters = data['hospitalization_id'].nunique()
                 duplicate_count = data.duplicated().sum()
                 ttl_smpl = "Total"
-                if sampling_rate < 100:
+                if sampling_rate is not None:
                     ttl_smpl = "Sample"
                     total_counts = original_data.shape[0]
                     sample_counts = data.shape[0]
@@ -117,6 +111,18 @@ def show_labs_qc():
                 st.write(validation_df)
                 logger.info("Data type validation completed.")
 
+                # Download data type validation results
+                if download_path is not None:
+                    try:
+                        validation_results_csv = validation_df.to_csv(index=True)
+                        file_path = os.path.join(download_path, f"{TABLE}_validation_results.csv")
+                        with open(file_path, 'w') as file:
+                            file.write(validation_results_csv)
+                        logger.info(f"Validation results saved to {file_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to save validation results to {download_path}/{TABLE}_validation_results.csv: {e}")
+                   
+
 
             # Display missingness for each column
             st.write(f"## Missingness")
@@ -137,6 +143,12 @@ def show_labs_qc():
                     missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
                     for idx, row in columns_with_missing.iterrows():
                         missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
+                    if download_path is not None:
+                        # Save missingness information to CSV
+                        missing_info_sorted_csv = missing_info_sorted.to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                            file.write(missing_info_sorted_csv)
+                        logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")             
                 else:
                     st.write("No missing values found in all required columns.")
                     missingness_summary = "No missing values found in any columns."
@@ -149,6 +161,11 @@ def show_labs_qc():
                 progress_bar.progress(55, text='Displaying summary statistics...')
                 logger.info("~~~ Displaying summary statistics ~~~")  
                 summary = data.describe(include="all")
+                summary_csv = summary.to_csv(index=True)
+                if download_path is not None:
+                    with open(os.path.join(download_path, f"{TABLE}_summary_statistics.csv"), 'w') as file:
+                        file.write(summary_csv)
+                    logger.info(f"Summary statistics saved to {download_path}/{TABLE}_summary_statistics.csv")
                 st.write(summary)
                 logger.info("Displayed summary statistics.")
 
@@ -233,6 +250,11 @@ def show_labs_qc():
                 progress_bar.progress(75, text='Summarizing lab categories...')
                 logger.info("~~~ Summarizing lab categories ~~~")  
                 lab_summary_stats = generate_summary_stats(data, 'lab_category', 'lab_value_numeric')
+                lab_summary_stats_csv = lab_summary_stats.to_csv(index=True)
+                if download_path is not None:
+                    with open(os.path.join(download_path, f"{TABLE}_summary_stats.csv"), 'w') as file:
+                        file.write(lab_summary_stats_csv)
+                    logger.info("Lab category summary statistics saved to lab_category_summary_stats.csv")
                 st.write(lab_summary_stats)
                 logger.info("Generated lab category summary statistics.")
 
@@ -257,11 +279,17 @@ def show_labs_qc():
                             })
                             outlier_percent = ((len(outliers) / total_counts) * 100).__round__(2)
                             qc_summary.append(f"A total of {len(outliers)} or {outlier_percent}% outlier(s) in {category}.")
-                            qc_recommendations.append("Outliers need to be replaced. Please review the outliers and replace them with recommended values.")
+                        qc_recommendations.append("Outliers need to be replaced. Please review the outliers and replace them with recommended values.")
                     if all_outliers_summary:
                         outliers_df = pd.DataFrame(all_outliers_summary)
                         outliers_df = outliers_df.sort_values(by='Outlier (%)', ascending=False)
                         st.write(outliers_df)
+                        # Save outliers information to CSV
+                        outliers_info_csv = outliers_df.to_csv(index=True)
+                        if download_path is not None:
+                            with open(os.path.join(download_path, f"{TABLE}_outliers.csv"), 'w') as file:
+                                file.write(outliers_info_csv)
+                            logger.info("Outliers information saved to lab_outliers.csv")
                 else:
                     st.write("No outliers found.")
                     qc_summary.append("No outliers found.")
@@ -274,6 +302,9 @@ def show_labs_qc():
                 progress_bar.progress(80, text='Displaying lab category value distribution...')
                 logger.info("~~~ Displaying lab category value distribution ~~~")
                 labs_plot = generate_facetgrid_histograms(data, 'lab_category', 'lab_value_numeric')
+                if download_path is not None:
+                    labs_plot.savefig(os.path.join(download_path, f"{TABLE}_category_value_distribution.png"))
+                    logger.info("Lab category value distribution saved to lab_category_value_distribution.png")
                 st.pyplot(labs_plot)
                 logger.info("Value distribution - lab categories displayed.")
         
@@ -290,6 +321,17 @@ def show_labs_qc():
                     st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
                     st.write(mapping.reset_index().drop("index", axis = 1))
                     n += 1
+                
+                # Save mappings to CSV
+                if download_path is not None:
+                    try:
+                        mappings_csv = pd.concat(mappings).reset_index().drop("index", axis = 1).to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_mappings.csv"), 'w') as file:
+                            file.write(mappings_csv)
+                        logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_mappings.csv")
+                    except Exception as e:
+                        logger.error(f"Failed to save Name to Category Mappings to {download_path}/{TABLE}_mappings.csv: {str(e)}")
+
 
             qc_summary.append(missingness_summary)  
 

@@ -29,15 +29,6 @@ def show_adt_qc():
     qc_recommendations = []
 
     if table in st.session_state:
-        # Sampling option
-        if 'sampling_option' in st.session_state:
-            sampling_rate = st.session_state['sampling_option']
-        else:
-            sampling_rate = 100
-        
-        # Check if download path is provided
-        if 'download_path' in st.session_state:
-            download_path = st.session_state['download_path']
 
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
 
@@ -53,8 +44,12 @@ def show_adt_qc():
             with st.spinner("Loading data..."):
                 progress_bar.progress(15, text='Loading data...')
                 logger.info("~~~ Loading data ~~~")
+
+                # Sampling option
+                sampling_rate = st.session_state['sampling_option']
+                download_path = st.session_state['download_path'] 
                 
-                if sampling_rate < 100:
+                if sampling_rate is not None:
                     original_data = st.session_state[table]
                     try:
                         frac = sampling_rate/100
@@ -76,7 +71,7 @@ def show_adt_qc():
                 ttl_unique_encounters = data['hospitalization_id'].nunique()
                 duplicate_count = data.duplicated().sum()
                 ttl_smpl = "Total"
-                if sampling_rate < 100:
+                if sampling_rate is not None:
                     ttl_smpl = "Sample"
                     total_counts = original_data.shape[0]
                     sample_counts = data.shape[0]
@@ -113,10 +108,17 @@ def show_adt_qc():
 
 
                 # Save validation results to CSV
-                validation_results_csv = validation_df.to_csv(index=False)
-                with open(os.path.join(download_path, f"{TABLE}_validation_results.csv"), 'w') as file:
-                    file.write(validation_results_csv)
-                logger.info(f"Validation results saved to {download_path}/{TABLE}_validation_results.csv")
+                        # Check if download path is provided
+                if download_path is not None:
+                    try:
+                        validation_results_csv = validation_df.to_csv(index=True)
+                        file_path = os.path.join(download_path, f"{TABLE}_validation_results.csv")
+                        with open(file_path, 'w') as file:
+                            file.write(validation_results_csv)
+                        logger.info(f"Validation results saved to {file_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to save validation results to {download_path}/{TABLE}_validation_results.csv: {e}")
+                        
 
             
             # Display missingness for each column
@@ -138,11 +140,13 @@ def show_adt_qc():
                     missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
                     for idx, row in columns_with_missing.iterrows():
                         missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
-                    # Save missingness information to CSV
-                    missing_info_sorted_csv = missing_info_sorted.to_csv(index=False)
-                    with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
-                        file.write(missing_info_sorted_csv)
-                    logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")
+                            # Check if download path is provided
+                    if download_path is not None:
+                        # Save missingness information to CSV
+                        missing_info_sorted_csv = missing_info_sorted.to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                            file.write(missing_info_sorted_csv)
+                        logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")
                 else:
                     st.write("No missing values found in all required columns.")
                     missingness_summary = "No missing values found in any columns."
@@ -206,10 +210,14 @@ def show_adt_qc():
                     n += 1
                 
                 # Save mappings to CSV
-                mappings_csv = pd.concat(mappings).reset_index().drop("index", axis = 1).to_csv(index=False)
-                with open(os.path.join(download_path, f"{TABLE}_mappings.csv"), 'w') as file:
-                    file.write(mappings_csv)
-                logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_mappings.csv")
+                if download_path is not None:
+                    try:
+                        mappings_csv = pd.concat(mappings).reset_index().drop("index", axis = 1).to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_mappings.csv"), 'w') as file:
+                            file.write(mappings_csv)
+                        logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_mappings.csv")
+                    except Exception as e:
+                        logger.error(f"Failed to save Name to Category Mappings to {download_path}/{TABLE}_mappings.csv: {str(e)}")
 
             
             # Check for Concurrent Admissions
@@ -227,10 +235,12 @@ def show_adt_qc():
                         qc_summary.append("There appears to be overlapping admissions to different locations.")
                         qc_recommendations.append("Please revise patient out_dttms to reflect appropriately.")
                         # Save overlaps to CSV
-                        overlaps_df_csv = overlaps_df.to_csv(index=False)
-                        with open(os.path.join(download_path, f"{TABLE}_overlapping_admissions.csv"), 'w') as file:
-                            file.write(overlaps_df_csv)
-                        logger.info(f"Overlapping Admissions saved to {download_path}/{TABLE}_overlapping_admissions.csv")
+                        # Check if download path is provided
+                        if download_path is not None:
+                            overlaps_df_csv = overlaps_df.to_csv(index=True)
+                            with open(os.path.join(download_path, f"{TABLE}_overlapping_admissions.csv"), 'w') as file:
+                                file.write(overlaps_df_csv)
+                            logger.info(f"Overlapping Admissions saved to {download_path}/{TABLE}_overlapping_admissions.csv")
                     except Exception as e:
                         st.error(f"Error creating overlaps DataFrame: {str(e)}")
                         logger.error(f"Error creating overlaps DataFrame: {str(e)}")

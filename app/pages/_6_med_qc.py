@@ -2,15 +2,12 @@ import streamlit as st
 import pandas as pd
 import logging
 import time
+import os
 from common_qc import check_required_variables, generate_summary_stats
 from common_qc import validate_and_convert_dtypes, name_category_mapping
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
+
 
 def show_meds_qc():
     '''
@@ -34,11 +31,6 @@ def show_meds_qc():
     qc_recommendations = []
 
     if table_name_session in st.session_state:
-        # Sampling option
-        if 'sampling_option' in st.session_state:
-            sampling_rate = st.session_state['sampling_option']
-        else:
-            sampling_rate = 100
 
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
 
@@ -56,7 +48,10 @@ def show_meds_qc():
                 progress_bar.progress(20, text='Loading data...')
                 logger.info("~~~ Loading data ~~~")
 
-                if sampling_rate < 100:
+                sampling_rate = st.session_state['sampling_option']
+                download_path = st.session_state['download_path'] 
+                
+                if sampling_rate is not None:
                     original_data = st.session_state[table_name_session]
                     try:
                         frac = sampling_rate/100
@@ -75,7 +70,7 @@ def show_meds_qc():
             with st.spinner("Loading data preview..."):
                 progress_bar.progress(25, text='Loading data preview...')
                 ttl_smpl = "Total"
-                if sampling_rate < 100:
+                if sampling_rate is not None:
                     ttl_smpl = "Sample"
                     total_counts = original_data.shape[0]
                     sample_counts = data.shape[0]
@@ -112,6 +107,18 @@ def show_meds_qc():
                 st.write(validation_df)
                 logger.info("Data type validation completed.")
 
+                # Download data type validation results
+                if download_path is not None:
+                    try:
+                        validation_results_csv = validation_df.to_csv(index=True)
+                        file_path = os.path.join(download_path, f"{TABLE}_validation_results.csv")
+                        with open(file_path, 'w') as file:
+                            file.write(validation_results_csv)
+                        logger.info(f"Validation results saved to {file_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to save validation results to {download_path}/{TABLE}_validation_results.csv: {e}")
+                      
+
             
             # Display missingness for each column
             st.write(f"## Missingness")
@@ -132,6 +139,12 @@ def show_meds_qc():
                     missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
                     for idx, row in columns_with_missing.iterrows():
                         missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
+                    if download_path is not None:
+                        # Save missingness information to CSV
+                        missing_info_sorted_csv = missing_info_sorted.to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                            file.write(missing_info_sorted_csv)
+                        logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")             
                 else:
                     st.write("No missing values found in all required columns.")
                     missingness_summary = "No missing values found in any columns."
@@ -167,6 +180,12 @@ def show_meds_qc():
                 progress_bar.progress(75, text='Summarizing medication doses by categories...')
                 logger.info("~~~ Summarizing medication doses by categories ~~~")  
                 med_summary_stats = generate_summary_stats(data, 'med_category', 'med_dose')
+                med_summary_csv = med_summary_stats.to_csv(index=True)
+                if download_path is not None:
+                    with open(os.path.join(download_path, f"{TABLE}_category_summary_stats.csv"), 'w') as file:
+                        file.write(med_summary_csv)
+                    logger.info(f"Summary statistics saved to {download_path}/{TABLE}_summary_statistics.csv")
+ 
                 st.write(med_summary_stats)
                 logger.info("Generated medication dose by category summary statistics.")
 
@@ -183,6 +202,17 @@ def show_meds_qc():
                     st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
                     st.write(mapping.reset_index().drop("index", axis = 1))
                     n += 1
+                
+                # Save mappings to CSV
+                if download_path is not None:
+                    try:
+                        mappings_csv = pd.concat(mappings).reset_index().drop("index", axis = 1).to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_mappings.csv"), 'w') as file:
+                            file.write(mappings_csv)
+                        logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_mappings.csv")
+                    except Exception as e:
+                        logger.error(f"Failed to save Name to Category Mappings to {download_path}/{TABLE}_mappings.csv: {str(e)}")
+
             
             qc_summary.append(missingness_summary)  
 

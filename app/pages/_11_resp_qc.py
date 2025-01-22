@@ -2,16 +2,13 @@ import streamlit as st
 import pandas as pd
 import logging
 import time
+import os
 from common_qc import check_required_variables
-from common_qc import replace_outliers_with_na_wide, plot_histograms_by_device_category
+from common_qc import replace_outliers_with_na_wide
 from common_qc import validate_and_convert_dtypes, name_category_mapping
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
+
 
 def show_respiratory_support_qc():
     '''
@@ -35,12 +32,6 @@ def show_respiratory_support_qc():
 
     if table in st.session_state:
 
-        # Sampling option
-        if 'sampling_option' in st.session_state:
-            sampling_rate = st.session_state['sampling_option']
-        else:
-            sampling_rate = 100
-
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
 
         # Start time
@@ -57,7 +48,10 @@ def show_respiratory_support_qc():
                 progress_bar.progress(15, text='Loading data...')
                 logger.info("~~~ Loading data ~~~")
                 
-                if sampling_rate < 100:
+                sampling_rate = st.session_state['sampling_option']
+                download_path = st.session_state['download_path'] 
+                
+                if sampling_rate is not None:
                     original_data = st.session_state[table]
                     try:
                         frac = sampling_rate/100
@@ -78,7 +72,7 @@ def show_respiratory_support_qc():
             with st.spinner("Loading data preview..."):
                 progress_bar.progress(20, text='Loading data preview...')
                 ttl_smpl = "Total"
-                if sampling_rate < 100:
+                if sampling_rate is not None:
                     ttl_smpl = "Sample"
                     total_counts = original_data.shape[0]
                     sample_counts = data.shape[0]
@@ -115,6 +109,18 @@ def show_respiratory_support_qc():
                 st.write(validation_df)
                 logger.info("Data type validation completed.")
 
+                # Download data type validation results
+                if download_path is not None:
+                    try:
+                        validation_results_csv = validation_df.to_csv(index=False)
+                        file_path = os.path.join(download_path, f"{TABLE}_validation_results.csv")
+                        with open(file_path, 'w') as file:
+                            file.write(validation_results_csv)
+                        logger.info(f"Validation results saved to {file_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to save validation results to {download_path}/{TABLE}_validation_results.csv: {e}")
+                       
+
 
             # Display missingness for each column
             st.write(f"## Missingness")
@@ -122,6 +128,7 @@ def show_respiratory_support_qc():
                 progress_bar.progress(40, text='Checking for missing values...')
                 logger.info("~~~ Checking for missing values ~~~")
                 missing_counts = data.isnull().sum()
+                missingness_summary = ""  # Store the summary temporarily
                 if missing_counts.any():
                     missing_percentages = (missing_counts / total_counts) * 100
                     missing_info = pd.DataFrame({
@@ -130,9 +137,19 @@ def show_respiratory_support_qc():
                     })
                     missing_info_sorted = missing_info.sort_values(by='Missing Count', ascending=False)
                     st.write(missing_info_sorted)
-                    qc_summary.append("Missing values found in columns - " + ', '.join(missing_info[missing_info['Missing Count'] > 0].index.tolist()))
+                    columns_with_missing = missing_info[missing_info['Missing Count'] > 0]
+                    missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
+                    for idx, row in columns_with_missing.iterrows():
+                        missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
+                    if download_path is not None:
+                        # Save missingness information to CSV
+                        missing_info_sorted_csv = missing_info_sorted.reset_index().to_csv(index=False)
+                        with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                            file.write(missing_info_sorted_csv)
+                        logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")             
                 else:
                     st.write("No missing values found in all required columns.")
+                    missingness_summary = "No missing values found in any columns."
                 logger.info("Checked for missing values.")
 
 
@@ -142,6 +159,11 @@ def show_respiratory_support_qc():
                 progress_bar.progress(50, text='Displaying summary statistics...')
                 logger.info("~~~ Displaying summary statistics ~~~")  
                 summary = data.describe()
+                summary_csv = summary.reset_index().to_csv(index=False)
+                if download_path is not None:
+                    with open(os.path.join(download_path, f"{TABLE}_summary_statistics.csv"), 'w') as file:
+                        file.write(summary_csv)
+                    logger.info(f"Summary statistics saved to {download_path}/{TABLE}_summary_statistics.csv")
                 st.write(summary)
                 logger.info("Displayed summary statistics.")
 
@@ -172,212 +194,57 @@ def show_respiratory_support_qc():
             
             st.write("## Device Category Summaries")
             st.write("###### * With Outliers")
-            def device_category_summary_fragment():
-                with st.spinner("Displaying summaries by device category..."):
-                    st.info("The page will reload to display the summaries by device category. Please wait for the page to reload.")
-                    progress_bar.progress(70, text='Displaying summaries by device category...')
-                    logger.info("~~~ Displaying summaries by device category ~~~")
-                    
-                    categories = data['device_category'].dropna().unique()
-                    categories.sort()
-                    
-                    with st.form(key='device_mode_category_form'):
-                        selected_category = st.selectbox('Select Device Category:', options=categories)
-                        opt_mode_category = st.radio(
-                            "Would you like to choose a mode category for the selected device category?",
-                            ['No', 'Yes'],
-                            horizontal=True,
-                            captions=['Ignore next dropdown if No', 'Select mode category below']
-                        )
-                        modes = data['mode_category'].dropna().unique()
-                        modes.sort()
-                        selected_mode = st.selectbox('Select Mode Category:', options=modes)
-                        
-                        st.session_state['selected_category'] = selected_category
-                        st.session_state['selected_mode'] = selected_mode
-                        
-                        submit_mode_opt = st.form_submit_button(label='Submit')
-                        
-                        if submit_mode_opt:
-                            if opt_mode_category == 'Yes':
-                                filtered_df = df[
-                                    (df['device_category'] == st.session_state['selected_category']) & 
-                                    (df['mode_category'] == st.session_state['selected_mode'])
-                                ]
-                                if filtered_df.empty:
-                                    st.warning(f"No data found for device category '{st.session_state['selected_category']}' and mode category '{st.session_state['selected_mode']}'.")
-                                else:
-                                    display_filtered_data(filtered_df, st.session_state['selected_category'], st.session_state['selected_mode'])
-                            else:
-                                filtered_df = df[df['device_category'] == st.session_state['selected_category']]
-                                if filtered_df.empty:
-                                    st.warning(f"No data found for device category '{st.session_state['selected_category']}'.")
-                                else:
-                                    display_filtered_data(filtered_df, st.session_state['selected_category'])
-
-            def display_filtered_data(filtered_df, selected_category, selected_mode=None):
-                st.write(f"### 1. Histograms for {selected_category}" + (f" with Mode Category {selected_mode}" if selected_mode else ""))
-                cat_plot = plot_histograms_by_device_category(df, selected_category, selected_mode)
-                st.pyplot(cat_plot)
+            with st.spinner("Displaying summaries by device category..."):
+                progress_bar.progress(70, text='Displaying summaries by device category...')
+                logger.info("~~~ Displaying summaries by device category ~~~")
                 
-                st.write(f"### 2. Summary for {selected_category}" + (f" with Mode Category {selected_mode}" if selected_mode else ""))
-                cat_data = filtered_df.describe()
-                st.write(cat_data)
+                # Overall Device Category Summary
+                st.write("### Overall Device Category Summary")
+                columns_to_pair = [
+                    'tracheostomy', 'fio2_set', 'lpm_set', 'tidal_volume_set', 'resp_rate_set',
+                    'pressure_control_set', 'pressure_support_set', 'flow_rate_set',
+                    'peak_inspiratory_pressure_set', 'inspiratory_time_set',
+                    'inspiratory_time_percent_set', 'inspiratory_time_ratio_set', 'peep_set',
+                    'tidal_volume_obs', 'resp_rate_obs', 'plateau_pressure_obs',
+                    'peak_inspiratory_pressure_obs', 'peep_obs', 'minute_vent_obs',
+                    'mean_airway_pressure_obs'
+                ]
+                long_format = pd.melt(
+                    df,
+                    id_vars=['device_category'],  
+                    value_vars=columns_to_pair,  
+                    var_name='attribute',        
+                    value_name='value'           
+                )
+                overall_category_summary = long_format.groupby(['device_category', 'attribute'])['value'].describe()
+                overall_category_summary = overall_category_summary.reset_index()
+                st.write(overall_category_summary)
+                cat_summary_csv = overall_category_summary.to_csv(index=False)
+                if download_path is not None:
+                    with open(os.path.join(download_path, f"{TABLE}_category_summary_stats.csv"), 'w') as file:
+                        file.write(cat_summary_csv)
+                    logger.info(f"Summary statistics saved to {download_path}/{TABLE}_category_summary_stats.csv")
+                logger.info("Displayed category summary statistics.")
                 
-                i = 3
-                device_cat_count = filtered_df.groupby(['device_category', 'device_name']).size().reset_index(name='count')
-                sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
-                if not sorted_dev.empty:
-                    st.write(f"### {i}. Device Name to Device Category Mapping for {selected_category}")
-                    st.write(sorted_dev)
-                    i += 1
-                
-                mode_cat_count = filtered_df.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
-                sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
-                if not sorted_mode.empty:
-                    st.write(f"### {i}. Mode Name to Mode Category Mapping for {selected_category}")
-                    st.write(sorted_mode)
-                    i += 1
-
-                if selected_category == 'IMV':
-                    st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
-                    encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
-                    vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
-                    vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
-                    vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
-                    vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
-                    
-                    initial_mode_choice = (
-                        vent_resp_tables
-                        .dropna(subset=['mode_category'])  
-                        .groupby('hospitalization_id')           
-                        .apply(lambda x: x.iloc[0])                    
-                        .groupby('mode_category')          
-                        .size()
-                        .rename('count')                            
-                    )
-                    st.write(initial_mode_choice)
-
-            # Call the fragment
-            device_category_summary_fragment()
-
-            # st.write("## Device Category Summaries")
-            # st.write("###### * With Outliers")
-            # with st.spinner("Displaying summaries by device category..."):
-            #     st.info("The page will reload to display the summaries by device category. Please wait for the page to reload.")
-            #     progress_bar.progress(70, text='Displaying summaries by device category...')
-            #     logger.info("~~~ Diplaying summaries by device category ~~~")
-            #     categories = data['device_category'].dropna().unique()
-            #     categories.sort()
-            #     with st.form(key='device_mode_category_form'):
-            #         selected_category = st.selectbox('Select Device Category:', options = categories)
-            #         opt_mode_category = st.radio("Would you like to choose a mode category for the selected device category?", ['No', 'Yes'], horizontal=True, captions=['Ignore next dropdown if No', 'Select mode category below'])
-            #         modes = data['mode_category'].dropna().unique()
-            #         modes.sort()
-            #         selected_mode = st.selectbox('Select Mode Category:', options = modes)
-            #         st.session_state['selected_category'] = selected_category
-            #         st.session_state['selected_mode'] = selected_mode
-            #         submit_mode_opt = st.form_submit_button(label='Submit')
-            #         if submit_mode_opt and opt_mode_category == 'Yes':
-            #             filtered_df = df[(df['device_category'] == st.session_state['selected_category']) & (df['mode_category'] == st.session_state['selected_mode'])]
-            #             if filtered_df.empty:
-            #                 st.warning(f"No data found for device category '{st.session_state['selected_category']}' and mode category '{st.session_state['selected_mode']}'.")
-            #             else:
-            #                 st.write(f"### 1. Histograms for {st.session_state['selected_category']} with Mode Category {st.session_state['selected_mode']}")
-            #                 cat_plot = plot_histograms_by_device_category(df, st.session_state['selected_category'], st.session_state['selected_mode'])
-            #                 st.pyplot(cat_plot)
-
-            #                 st.write(f"### 2. Summary for {st.session_state['selected_category']} with Mode Category {st.session_state['selected_mode']}")
-            #                 cat_data = df[(df['device_category'] == st.session_state['selected_category']) & (df['mode_category'] == st.session_state['selected_mode'])]
-            #                 cat_summary = cat_data.describe()
-            #                 st.write(cat_summary)
-
-            #                 i = 3
-            #                 device_cat_count = cat_data.groupby(['device_category', 'device_name']).size().reset_index(name='count')
-            #                 sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
-            #                 if not sorted_dev.empty:
-            #                     st.write(f"### {i}. Device Name to Device Category Mapping for {st.session_state['selected_category']}")
-            #                     st.write(sorted_dev)
-            #                     i += 1
-
-            #                 # st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
-            #                 mode_cat_count = cat_data.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
-            #                 sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
-            #                 if not sorted_mode.empty:
-            #                     st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
-
-            #                     st.write(sorted_mode)
-            #                     i += 1
-
-            #                 encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
-            #                 vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
-            #                 vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
-            #                 vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
-            #                 vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
-                            
-            #                 if st.session_state['selected_category'] == 'IMV':
-            #                     st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
-            #                     initial_mode_choice = (
-            #                     vent_resp_tables
-            #                     .dropna(subset=['mode_category'])  
-            #                     .groupby('hospitalization_id')           
-            #                     .apply(lambda x: x.iloc[0])                    
-            #                     .groupby('mode_category')          
-            #                     .size()
-            #                     .rename('count')                            
-            #                     )
-            #                     st.write(initial_mode_choice)
-            #         if submit_mode_opt and opt_mode_category == 'No':
-            #             filtered_df = df[df['device_category'] == st.session_state['selected_category']]
-            #             if filtered_df.empty:
-            #                 st.warning(f"No data found for device category '{st.session_state['selected_category']}'.")
-            #             else:
-            #                 st.write(f"### 1. Histograms for {st.session_state['selected_category']}")
-            #                 cat_plot = plot_histograms_by_device_category(data, st.session_state['selected_category'])
-            #                 st.pyplot(cat_plot)
-
-            #                 st.write(f"### 2. Summary for {st.session_state['selected_category']}")
-            #                 cat_data = df[df['device_category'] == st.session_state['selected_category']]
-            #                 cat_summary = cat_data.describe()
-            #                 st.write(cat_summary)
-
-            #                 i = 3
-            #                 device_cat_count = cat_data.groupby(['device_category', 'device_name']).size().reset_index(name='count')
-            #                 # filtered_dev = device_cat_count[device_cat_count['count'] > 100]
-            #                 sorted_dev = device_cat_count.sort_values(by=['device_category', 'device_name'], ascending=[True, True])
-            #                 if not sorted_dev.empty:
-            #                     st.write(f"### {i}. Device Name to Device Category Mapping for {st.session_state['selected_category']}")
-            #                     # st.write("*for counts > 100")
-            #                     st.write(sorted_dev)
-            #                     i += 1
-
-            #                 mode_cat_count = cat_data.groupby(['mode_category', 'mode_name']).size().reset_index(name='count')
-            #                 # filtered_mode = mode_cat_count[mode_cat_count['count'] > 100]
-            #                 sorted_mode = mode_cat_count.sort_values(by=['mode_category', 'mode_name'], ascending=[True, True])
-            #                 if not sorted_mode.empty:
-            #                     st.write(f"### {i}. Mode Name to Mode Category Mapping for {st.session_state['selected_category']}")
-            #                     # st.write("*for counts > 100")
-            #                     st.write(sorted_mode)
-            #                     i += 1
-
-            #                 encounters_w_vent = df.loc[df['device_category'] == 'IMV', 'hospitalization_id'].unique()
-            #                 vent_resp_tables = df[df['hospitalization_id'].isin(encounters_w_vent)]
-            #                 vent_resp_tables['min_time'] = vent_resp_tables.groupby('hospitalization_id')['recorded_dttm'].transform('min')
-            #                 vent_resp_tables['time'] = (vent_resp_tables['recorded_dttm'] - vent_resp_tables['min_time']).dt.total_seconds() / 3600
-            #                 vent_resp_tables = vent_resp_tables.drop(columns=['recorded_dttm', 'min_time'])
-                            
-            #                 if st.session_state['selected_category'] == 'IMV':
-            #                     st.write(f"#### {i}. Initial Mode Choice for Mechanical Ventilation")
-            #                     initial_mode_choice = (
-            #                     vent_resp_tables
-            #                     .dropna(subset=['mode_category'])  
-            #                     .groupby('hospitalization_id')           
-            #                     .apply(lambda x: x.iloc[0])                    
-            #                     .groupby('mode_category')          
-            #                     .size()
-            #                     .rename('count')                            
-            #                     )
-            #                     st.write(initial_mode_choice)
+                # Device Category with Mode Category Summary
+                st.write("### Device Category with Mode Category Summary")
+                mode_long_format = pd.melt(
+                    df,
+                    id_vars=['device_category', 'mode_category'],  
+                    value_vars=columns_to_pair,  
+                    var_name='attribute',        
+                    value_name='value'           
+                )
+                mode_category_summary = mode_long_format.groupby(['device_category', 'mode_category', 'attribute'])['value'].describe()
+                mode_category_summary = mode_category_summary.reset_index()
+                st.write(mode_category_summary)
+                mode_summary_csv = mode_category_summary.to_csv(index=False)
+                if download_path is not None:
+                    with open(os.path.join(download_path, f"{TABLE}_mode_summary_stats.csv"), 'w') as file:
+                        file.write(mode_summary_csv)
+                    logger.info(f"Summary statistics saved to {download_path}/{TABLE}_mode_summary_stats.csv")
+                logger.info("Displayed category mode summary statistics.")
+        
             
             # Name to Category mappings
             logger.info("~~~ Mapping ~~~")
@@ -392,6 +259,18 @@ def show_respiratory_support_qc():
                     st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
                     st.write(mapping.reset_index().drop("index", axis = 1))
                     n += 1
+                    # Save mappings to CSV
+                    if download_path is not None:
+                        try:
+                            mapping_csv = mapping.drop("index", axis = 1).to_csv(index=False)
+                            with open(os.path.join(download_path, f"{TABLE}_{mapping_name}_mapping.csv"), 'w') as file:
+                                file.write(mapping_csv)
+                            logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_{mapping_name}_mapping.csv")
+                        except Exception as e:
+                            logger.error(f"Failed to save Name to Category Mappings to {download_path}/{TABLE}_{mapping_name}_mapping.csv: {str(e)}")
+
+
+            qc_summary.append(missingness_summary)
             
             progress_bar.progress(100, text='Quality check completed. Displaying results...')
 

@@ -2,16 +2,13 @@ import streamlit as st
 import pandas as pd
 import logging
 import time
+import os
 from common_qc import check_required_variables, check_categories_exist
 from common_qc import replace_outliers_with_na_long, generate_facetgrid_histograms, generate_summary_stats
 from common_qc import validate_and_convert_dtypes, name_category_mapping, read_data
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
+
 
 def show_vitals_qc():
     '''
@@ -34,12 +31,6 @@ def show_vitals_qc():
     qc_recommendations = []
 
     if table in st.session_state:
-        
-        # Sampling option
-        if 'sampling_option' in st.session_state:
-            sampling_rate = st.session_state['sampling_option']
-        else:
-            sampling_rate = 100
 
             st.info("Significant load time for Vitals QC. Please be patient.", icon="ℹ️")
             progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
@@ -58,7 +49,10 @@ def show_vitals_qc():
                     progress_bar.progress(15, text='Loading data...')
                     logger.info("~~~ Loading data ~~~")
 
-                    if sampling_rate < 100:
+                    sampling_rate = st.session_state['sampling_option']
+                    download_path = st.session_state['download_path'] 
+                    
+                    if sampling_rate is not None:
                         original_data = st.session_state[table]
                         try:
                             frac = sampling_rate/100
@@ -69,8 +63,8 @@ def show_vitals_qc():
                     else:
                         data = st.session_state[table]
 
-                    df = data.copy()
-                    logger.info("Data loaded successfully.")
+                        df = data.copy()
+                        logger.info("Data loaded successfully.")
 
 
                 # Display the data
@@ -79,7 +73,7 @@ def show_vitals_qc():
                     progress_bar.progress(20, text='Loading data preview...')
                     logger.info("~~~ Displaying data ~~~")
                     ttl_smpl = "Total"
-                    if sampling_rate < 100:
+                    if sampling_rate is not None:
                         ttl_smpl = "Sample"
                         total_counts = original_data.shape[0]
                         sample_counts = data.shape[0]
@@ -116,6 +110,17 @@ def show_vitals_qc():
                     st.write(validation_df)
                     logger.info("Data type validation completed.")
 
+                    # Download data type validation results
+                    if download_path is not None:
+                        try:
+                            validation_results_csv = validation_df.to_csv(index=True)
+                            file_path = os.path.join(download_path, f"{TABLE}_validation_results.csv")
+                            with open(file_path, 'w') as file:
+                                file.write(validation_results_csv)
+                            logger.info(f"Validation results saved to {file_path}")
+                        except Exception as e:
+                            logger.error(f"Failed to save validation results to {download_path}/{TABLE}_validation_results.csv: {e}")
+                    
 
                 # Display missingness for each column
                 st.write(f"## Missingness")
@@ -123,6 +128,7 @@ def show_vitals_qc():
                     progress_bar.progress(40, text='Checking for missing values...')
                     logger.info("~~~ Checking for missing values ~~~")
                     missing_counts = data.isnull().sum()
+                    missingness_summary = ""  # Store the summary temporarily
                     if missing_counts.any():
                         missing_percentages = (missing_counts / total_counts) * 100
                         missing_info = pd.DataFrame({
@@ -131,9 +137,19 @@ def show_vitals_qc():
                         })
                         missing_info_sorted = missing_info.sort_values(by='Missing Count', ascending=False)
                         st.write(missing_info_sorted)
-                        qc_summary.append("Missing values found in columns - " + ', '.join(missing_info[missing_info['Missing Count'] > 0].index.tolist()))
+                        columns_with_missing = missing_info[missing_info['Missing Count'] > 0]
+                        missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
+                        for idx, row in columns_with_missing.iterrows():
+                            missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
+                        if download_path is not None:
+                            # Save missingness information to CSV
+                            missing_info_sorted_csv = missing_info_sorted.reset_index().to_csv(index=True)
+                            with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                                file.write(missing_info_sorted_csv)
+                            logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")             
                     else:
                         st.write("No missing values found in all required columns.")
+                        missingness_summary = "No missing values found in any columns."
                     logger.info("Checked for missing values.")
 
 
@@ -154,7 +170,7 @@ def show_vitals_qc():
                 # Check for presence of all vital categories
                 logger.info("~~~ Checking for presence of all vital categories ~~~")
                 vitals_outlier_thresholds_filepath = "thresholds/nejm_outlier_thresholds_vitals.csv"
-                vitals_outlier_thresholds = read_data(vitals_outlier_thresholds_filepath, 'csv')
+                vitals_outlier_thresholds = pd.read_csv(vitals_outlier_thresholds_filepath)
                 st.write('## Presence of All Vital Categories')
                 with st.spinner("Checking for presence of all vital categories..."):
                     progress_bar.progress(60, text='Checking for presence of all vital categories...')
@@ -192,6 +208,11 @@ def show_vitals_qc():
                 with st.spinner("Generating vital category summary statistics..."):
                     progress_bar.progress(70, text='Generating vital category summary statistics...')
                     vitals_summary_stats = generate_summary_stats(data, 'vital_category', 'vital_value')
+                    vitals_summary_csv = vitals_summary_stats.reset_index().to_csv(index=True)
+                    if download_path is not None:
+                        with open(os.path.join(download_path, f"{TABLE}_category_summary_statistics.csv"), 'w') as file:
+                            file.write(vitals_summary_csv)
+                        logger.info(f"Summary statistics saved to {download_path}/{TABLE}_category__summary_stats.csv")
                     st.write(vitals_summary_stats)
                     logger.info("Vital category summary statistics displayed.")
 
@@ -212,6 +233,9 @@ def show_vitals_qc():
                     progress_bar.progress(80, text='Displaying value distribution - vital categories...')
                     logger.info("~~~ Displaying value distribution - vital categories ~~~") 
                     vitals_plot = generate_facetgrid_histograms(df, 'vital_category', 'vital_value')
+                    if download_path is not None:
+                        vitals_plot.savefig(os.path.join(download_path, f"{TABLE}_vital_category_value_distribution.png"))
+                        logger.info("Vital category value distribution saved to vital_category_value_distribution.png")
                     st.pyplot(vitals_plot)
                     logger.info("Value distribution - vital categories displayed.")
                 
@@ -228,6 +252,20 @@ def show_vitals_qc():
                         st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
                         st.write(mapping.reset_index().drop("index", axis = 1))
                         n += 1
+
+                        # Save each mapping to a separate CSV
+                        if download_path is not None:
+                            try:
+                                mapping_csv = mapping.reset_index().drop("index", axis = 1).to_csv(index=True)
+                                file_name = f"{TABLE}_{mapping_name}_mapping.csv"
+                                with open(os.path.join(download_path, file_name), 'w') as file:
+                                    file.write(mapping_csv)
+                                logger.info(f"Mapping `{mapping_name}` to `{mapping_cat}` saved to {download_path}/{file_name}")
+                            except Exception as e:
+                                logger.error(f"Failed to save mapping `{mapping_name}` to `{mapping_cat}` to {download_path}/{file_name}: {str(e)}")
+
+
+                qc_summary.append(missingness_summary)  
 
                 progress_bar.progress(100, text='Quality check completed. Displaying results...')
 

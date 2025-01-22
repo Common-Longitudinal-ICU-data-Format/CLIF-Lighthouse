@@ -2,15 +2,11 @@ import streamlit as st
 import pandas as pd
 import logging
 import time
+import os
 from common_qc import check_required_variables
 from common_qc import validate_and_convert_dtypes, name_category_mapping
 from logging_config import setup_logging
 from common_features import set_bg_hack_url
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from io import BytesIO
 
 def show_hosp_qc():
     '''
@@ -34,13 +30,7 @@ def show_hosp_qc():
 
 
     if table in st.session_state:
-        # Sampling option
-        if 'sampling_option' in st.session_state:
-            sampling_rate = st.session_state['sampling_option']
-        else:
-            sampling_rate = 100
-
-
+       
         progress_bar = st.progress(0, text="Quality check in progress. Please wait...")
 
         # Start time
@@ -56,7 +46,11 @@ def show_hosp_qc():
                 progress_bar.progress(15, text='Loading data...')
                 logger.info("~~~ Loading data ~~~")
 
-                if sampling_rate < 100:
+                # Sampling option
+                sampling_rate = st.session_state['sampling_option']
+                download_path = st.session_state['download_path'] 
+                
+                if sampling_rate is not None:
                     original_data = st.session_state[table]
                     try:
                         frac = sampling_rate/100
@@ -78,7 +72,7 @@ def show_hosp_qc():
                 ttl_unique_encounters = data['hospitalization_id'].nunique()
                 duplicate_count = data.duplicated().sum()
                 ttl_smpl = "Total"
-                if sampling_rate < 100:
+                if sampling_rate is not None:
                     ttl_smpl = "Sample"
                     total_counts = original_data.shape[0]
                     sample_counts = data.shape[0]
@@ -113,6 +107,18 @@ def show_hosp_qc():
                 st.write(validation_df)
                 logger.info("Data type validation completed.")
 
+                # Download data type validation results
+                if download_path is not None:
+                    try:
+                        validation_results_csv = validation_df.to_csv(index=True)
+                        file_path = os.path.join(download_path, f"{TABLE}_validation_results.csv")
+                        with open(file_path, 'w') as file:
+                            file.write(validation_results_csv)
+                        logger.info(f"Validation results saved to {file_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to save validation results to {download_path}/{TABLE}_validation_results.csv: {e}")
+                        
+
             
             # Display missingness for each column
             st.write(f"## Missingness")
@@ -133,6 +139,12 @@ def show_hosp_qc():
                     missingness_summary = f"Missing values found in {len(columns_with_missing)} columns:\n"
                     for idx, row in columns_with_missing.iterrows():
                         missingness_summary += f"- {idx}: {row['Missing Count']} records ({row['Missing Percentage']})\n"
+                    if download_path is not None:
+                        # Save missingness information to CSV
+                        missing_info_sorted_csv = missing_info_sorted.to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_missingness.csv"), 'w') as file:
+                            file.write(missing_info_sorted_csv)
+                        logger.info(f"Missingness information saved to {download_path}/{TABLE}_missingness.csv")             
                 else:
                     st.write("No missing values found in all required columns.")
                     missingness_summary = "No missing values found in any columns."
@@ -164,6 +176,17 @@ def show_hosp_qc():
                     st.write(f"{n}. Mapping `{mapping_name}` to `{mapping_cat}`")
                     st.write(mapping.reset_index().drop("index", axis = 1))
                     n += 1
+
+                # Save mappings to CSV
+                if download_path is not None:
+                    try:
+                        mappings_csv = pd.concat(mappings).reset_index().drop("index", axis = 1).to_csv(index=True)
+                        with open(os.path.join(download_path, f"{TABLE}_mappings.csv"), 'w') as file:
+                            file.write(mappings_csv)
+                        logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_mappings.csv")
+                    except Exception as e:
+                        logger.error(f"Failed to save Name to Category Mappings to {download_path}/{TABLE}_mappings.csv: {str(e)}")
+
 
             # Move this line to after all other QC checks (just before displaying QC Summary)
             qc_summary.append(missingness_summary)  
