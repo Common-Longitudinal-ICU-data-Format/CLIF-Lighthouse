@@ -127,7 +127,7 @@ def show_vitals_qc():
                 with st.spinner("Checking for missing values..."):
                     progress_bar.progress(40, text='Checking for missing values...')
                     logger.info("~~~ Checking for missing values ~~~")
-                    missing_counts = data.isnull().sum() + data.isna().sum()
+                    missing_counts = data.isna().sum()
                     missingness_summary = ""  # Store the summary temporarily
                     if missing_counts.any():
                         missing_percentages = (missing_counts / total_counts) * 100
