@@ -127,7 +127,7 @@ def show_respiratory_support_qc():
             with st.spinner("Checking for missing values..."):
                 progress_bar.progress(40, text='Checking for missing values...')
                 logger.info("~~~ Checking for missing values ~~~")
-                missing_counts = data.isnull().sum()
+                missing_counts = data.isnull().sum() + data.isna().sum()
                 missingness_summary = ""  # Store the summary temporarily
                 if missing_counts.any():
                     missing_percentages = (missing_counts / total_counts) * 100
@@ -262,7 +262,8 @@ def show_respiratory_support_qc():
                     # Save mappings to CSV
                     if download_path is not None:
                         try:
-                            mapping_csv = mapping.drop("index", axis = 1).to_csv(index=False)
+                            # mapping_csv = mapping.drop("index", axis = 1).to_csv(index=False)
+                            mapping_csv = mapping.reset_index(drop=True).to_csv(index=False)
                             with open(os.path.join(download_path, f"{TABLE}_{mapping_name}_mapping.csv"), 'w') as file:
                                 file.write(mapping_csv)
                             logger.info(f"Name to Category Mappings saved to {download_path}/{TABLE}_{mapping_name}_mapping.csv")
