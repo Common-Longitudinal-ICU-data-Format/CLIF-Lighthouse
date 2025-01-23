@@ -193,7 +193,7 @@ def show_respiratory_support_qc():
                     st.write("Outliers found in the data.")
             
             st.write("## Device Category Summaries")
-            st.write("###### * With Outliers")
+            st.write("###### * Without Outliers")
             with st.spinner("Displaying summaries by device category..."):
                 progress_bar.progress(70, text='Displaying summaries by device category...')
                 logger.info("~~~ Displaying summaries by device category ~~~")
@@ -210,7 +210,7 @@ def show_respiratory_support_qc():
                     'mean_airway_pressure_obs'
                 ]
                 long_format = pd.melt(
-                    df,
+                    data,
                     id_vars=['device_category'],  
                     value_vars=columns_to_pair,  
                     var_name='attribute',        
