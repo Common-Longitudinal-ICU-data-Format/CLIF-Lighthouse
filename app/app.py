@@ -47,17 +47,16 @@ def show_home():
                     """)
             with c3:
                     st.write("""
-                    - **Microbiology**
                     - **Patient**
+                    - **Patient Assessment**
                     """)
             with c4:
                     st.write("""
-                    - **Patient Assessment**
                     - **Position**
+                    - **Respiratory Support**
                     """)
             with c5:
                     st.write("""
-                    - **Respiratory Support**
                     - **Vitals**
                     """)
             
@@ -102,8 +101,11 @@ def show_home():
                     st.session_state['download_path'] = download_path
 
             logger.info("Loading QC results page")
-            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
-                "Hospitalization", "Labs", "Medication", "Microbiology", "Patient", 
+            # tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
+            #     "Hospitalization", "Labs", "Medication", "Microbiology", "Patient", 
+            #     "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["ADT", 
+                "Hospitalization", "Labs", "Medication", "Patient", 
                 "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
 
             with tab1:
@@ -118,22 +120,22 @@ def show_home():
             with tab4:
                 show_meds_qc()
 
-            with tab5:
-                show_microbio_qc()
+            # with tab5:
+            #     show_microbio_qc()
 
-            with tab6:
+            with tab5:
                 show_patient_qc()
 
-            with tab7:
+            with tab6:
                 show_patient_assess_qc()
 
-            with tab8:
+            with tab7:
                 show_position_qc()
 
-            with tab9:
+            with tab8:
                 show_respiratory_support_qc()
 
-            with tab10:
+            with tab9:
                 show_vitals_qc()
 
   
