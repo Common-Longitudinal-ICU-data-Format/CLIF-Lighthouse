@@ -228,11 +228,11 @@ def show_vitals_qc():
 
                 # Value Distribution - Vital Categories
                 st.write("## Value Distribution* - Vital Categories")
-                st.write("###### * With Outliers")
+                st.write("###### * Without Outliers")
                 with st.spinner("Displaying value distribution - vital categories..."):
                     progress_bar.progress(80, text='Displaying value distribution - vital categories...')
                     logger.info("~~~ Displaying value distribution - vital categories ~~~") 
-                    vitals_plot = generate_facetgrid_histograms(df, 'vital_category', 'vital_value')
+                    vitals_plot = generate_facetgrid_histograms(data, 'vital_category', 'vital_value')
                     if download_path is not None:
                         vitals_plot.savefig(os.path.join(download_path, f"{TABLE}_vital_category_value_distribution.png"))
                         logger.info("Vital category value distribution saved to vital_category_value_distribution.png")

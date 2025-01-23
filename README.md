@@ -46,7 +46,5 @@ cd app
 streamlit run app.py
 ```
 
-## CLIF-Lighthouse - Quality Control
-<img width="1440" alt="Screenshot 2024-11-04 at 10 55 27" src="https://github.com/user-attachments/assets/b81adc8f-f6ca-4d7b-843b-10070f7f6e51">
 
 
