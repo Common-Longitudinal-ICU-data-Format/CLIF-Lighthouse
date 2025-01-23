@@ -2,114 +2,176 @@ import streamlit as st
 st.set_page_config(page_title=None, page_icon=None, layout="wide", initial_sidebar_state="collapsed", menu_items=None)
 
 import os
-import base64
-from pages._2_qc import show_qc
-from pages._14_cohort import show_cohort
+import logging
 from streamlit_navigation_bar import st_navbar
+from logging_config import setup_logging
+# from common_features import set_bg_hack_url
+from common_qc import read_data
+from pages._3_adt_qc import show_adt_qc
+from pages._4_hosp_qc import show_hosp_qc
+from pages._5_labs_qc import show_labs_qc
+from pages._6_med_qc import show_meds_qc
+from pages._7_microbio_qc import show_microbio_qc
+from pages._8_patient_qc import show_patient_qc
+from pages._9_patient_assess_qc import show_patient_assess_qc
+from pages._10_position_qc import show_position_qc
+from pages._11_resp_qc import show_respiratory_support_qc
+from pages._12_vitals_qc import show_vitals_qc
 
 def show_home():
-    file_ = open("assets/logos.gif", "rb")
-    contents = file_.read()
-    data_url = base64.b64encode(contents).decode("utf-8")
-    file_.close()
+    # Initialize logger
+    setup_logging()
+    logger = logging.getLogger(__name__)
 
-    st.markdown(
-    f'<div style="text-align: center;"><img src="data:image/gif;base64,{data_url}" style="width:1000px; height:50;"></div>',
-    unsafe_allow_html=True,
-    )
+    _, main_qc_form, _ = st.columns([1, 3, 1])
 
-    pg1, pg2, pg3 = st.columns([1, 1, 1], gap="large")
-    with pg1:
-        _, qc_p2, _ = st.columns([0.5, 2, 0.5], gap="small")
-        with qc_p2:
-            st.image("assets/QC.png", use_column_width=True)
-        _, qc_p2_a, _ = st.columns([0.5, 2, 0.5], gap="small")
-        with qc_p2_a:
-            st.title("Quality Controls")
-        _, qc_p2_b, _ = st.columns([0.15, 2, 0.15], gap="small")
-        with qc_p2_b:    
+    with main_qc_form:
+
+        st.title("Quality Controls")
+
+        with st.form(key='main_form', clear_on_submit=False):
+
             st.write("""
-    Our Quality Controls feature is designed to streamline your data validation processes, reduce errors, and ensure that your data is always research-ready. QCs are available for:
-
-    - **ADT**
-    - **Hospitalization**
-    - **Labs**
-    - **Medication**
-    - **Microbiology**
-    - **Patient**
-    - **Patient Assessment**
-    - **Position**
-    - **Respiratory Support**
-    - **Vitals**
-
+                    Welcome to LightHouse! Our Quality Controls feature is designed to streamline your data validation processes, reduce errors, and ensure that your data is always research-ready. QCs are available for:
+                        """)
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                    st.write("""
+                    - **ADT**
+                    - **Hospitalization**
                     """)
-        
-    with pg2:
-        _, vm_p2, _ = st.columns([0.5, 2, 0.5], gap="small")
-        with vm_p2:
-            st.image("assets/Vocab_map.png", use_column_width=True)
-        _, vm_p2_a, _ = st.columns([0.35, 2, 0.05], gap="small")
-        with vm_p2_a:
-            st.title("Vocabulary Mapping")
-            st.write("""Coming Soon!""")
+            with c2:
+                    st.write("""
+                    - **Labs**
+                    - **Medication**
+                    """)
+            with c3:
+                    st.write("""
+                    - **Patient**
+                    - **Patient Assessment**
+                    """)
+            with c4:
+                    st.write("""
+                    - **Position**
+                    - **Respiratory Support**
+                    """)
+            with c5:
+                    st.write("""
+                    - **Vitals**
+                    """)
             
-    with pg3:
-        _, cd_p2, _ = st.columns([0.5, 2, 0.5], gap="small")
-        with cd_p2:
-            st.image("assets/Cohort_dsicover.png", use_column_width=True)
-        _, cd_p2_a, _ = st.columns([0.45, 2, 0.01], gap="small")
-        with cd_p2_a:
-            st.title("Cohort Discovery")
-            st.write("""Coming Soon!""")
+            files = st.file_uploader(
+                "Select one or more files", 
+                accept_multiple_files=True, 
+                type=["csv", "parquet", "fst"]
+            )
 
+            # Sampling option
+            s_col1, _, _, _ = st.columns(4)
+            with s_col1:
+                sampling_option = st.number_input("Set dataset sample(%) for QC ***(optional)***", min_value=1, max_value=100, value=None, step=5)
+            download_path = st.text_input("Enter path to save automated downloads of generated tables and images ***(optional)***", value=None)
+
+            submit = st.form_submit_button(label='Submit')
+
+        if submit:
+            st.info("Note that a new tab will not load until the current tab has finished loading. " \
+                "The overall progress of the quality control checks will be displayed. For detailed progress information, please expand the required table in the QC section.", 
+                icon="ℹ️")
+            with st.spinner('Loading...'):
+                if files:
+                    st.session_state["files"] = "Yes"
+                    try:
+                        for file in files:
+                            df = read_data(file)
+                            table_name = file.name.split('.')[0]
+                            st.session_state[table_name] = df
+                    except Exception as e:
+                        st.write("Error: No files were submitted or an issue occurred while processing the files.")
+                        st.write(f"Details: {e}")
+
+                st.session_state['sampling_option'] = None
+                if sampling_option:
+                    logger.info(f"Sampling option selected: {sampling_option}")
+                    st.session_state['sampling_option'] = sampling_option
+                
+                st.session_state['download_path'] = None
+                if download_path:
+                    logger.info(f"Download path option selected: {download_path}")
+                    st.session_state['download_path'] = download_path
+
+            logger.info("Loading QC results page")
+            # tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(["ADT", 
+            #     "Hospitalization", "Labs", "Medication", "Microbiology", "Patient", 
+            #     "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
+            tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["ADT", 
+                "Hospitalization", "Labs", "Medication", "Patient", 
+                "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
+
+            with tab1:
+                show_adt_qc()
+
+            with tab2:
+                show_hosp_qc()
+
+            with tab3:
+                show_labs_qc()
+
+            with tab4:
+                show_meds_qc()
+
+            # with tab5:
+            #     show_microbio_qc()
+
+            with tab5:
+                show_patient_qc()
+
+            with tab6:
+                show_patient_assess_qc()
+
+            with tab7:
+                show_position_qc()
+
+            with tab8:
+                show_respiratory_support_qc()
+
+            with tab9:
+                show_vitals_qc()
+
+  
 parent_dir = os.path.dirname(os.path.abspath(__file__))
 logo_path = os.path.join(parent_dir, "assets/Picture1.svg")
-page = ["Home", "Quality Controls", "Vocabulary Mapping", "Cohort Discovery"]
+page = [""]
 styles = {
     "nav": {
         "background-color": "#2e3a59",
         "display": "flex",
-        "justify-content": "space-between",
-        "align-items": "center",
+        "justify-content": "right",  # Center the content horizontally
+        "align-items": "right",  # Center the content vertically
         "padding": "10px 0",  # Adjust padding to increase nav bar height
-        "height": "70px",
+        "height": "100px",
         "font-size": "1.2em",
     },
     "img": {
-        "padding-right": "0px",
-        "height": "150px",
-        "padding-bottom": "15px",
+        "position": "absolute",  # Allow positioning relative to the nav
+        "left": "50%",  # Center horizontally
+        "top": "50%",   # Center vertically
+        "transform": "translate(-50%, -50%)",
+        "height": "150px",  # Adjust the logo size to fit the navbar
     },
     "span": {
         "color": "white",
-        "padding": "14px",
-        "flex": "1",
-        "text-align": "center",
-        "white-space": "nowrap",
         "font-size": "1.0em",
-        
-    },
-    "active": {
-        "background-color": "#3a4a6f",
-        "color": "white",
-        "padding": "20px 30px",
-        "border-radius": "5px",
+        "white-space": "nowrap"
     }
 }
+
+
 options = {
-    "show_menu": True,
-    "show_sidebar": True,
+    "show_menu": False,
+    "show_sidebar": False,
 }
 
 selected_page = st_navbar(page, styles=styles, logo_path=logo_path, options=options)
-
-functions = {
-    "Home": show_home,
-    "Quality Controls": show_qc,
-    "Vocabulary Mapping": None,
-    "Cohort Discovery": show_cohort,
-}
-go_to = functions.get(selected_page)
-if go_to:
-    go_to()
-
+# set_bg_hack_url()
+show_home()
