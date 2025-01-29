@@ -204,7 +204,7 @@ def show_respiratory_support_qc():
                     'tracheostomy', 'fio2_set', 'lpm_set', 'tidal_volume_set', 'resp_rate_set',
                     'pressure_control_set', 'pressure_support_set', 'flow_rate_set',
                     'peak_inspiratory_pressure_set', 'inspiratory_time_set',
-                    'inspiratory_time_percent_set', 'inspiratory_time_ratio_set', 'peep_set',
+                    'peep_set',
                     'tidal_volume_obs', 'resp_rate_obs', 'plateau_pressure_obs',
                     'peak_inspiratory_pressure_obs', 'peep_obs', 'minute_vent_obs',
                     'mean_airway_pressure_obs'
@@ -303,4 +303,4 @@ def show_respiratory_support_qc():
         logger.warning(f"Please upload {TABLE} data to proceed.")
 
     logger.info(f"!!! Completed QC for {TABLE}.")   
-
+    
