@@ -29,7 +29,7 @@ def show_home():
 
         st.title("Quality Controls")
 
-        with st.form(key='main_form', clear_on_submit=False):
+        with st.form(key='main_form', clear_on_submit=True):
 
             st.write("""
                     Welcome to LightHouse! Our Quality Controls feature is designed to streamline your data validation processes, reduce errors, and ensure that your data is always research-ready. QCs are available for:
