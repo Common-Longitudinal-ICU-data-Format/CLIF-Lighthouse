@@ -109,34 +109,64 @@ def show_home():
                 "Patient Assessment", "Position", "Respiratory Support", "Vitals"])
 
             with tab1:
-                show_adt_qc()
+                try:
+                    show_adt_qc()
+                except Exception as e:
+                    st.write(f"Error loading ADT QC: {e}")
 
             with tab2:
-                show_hosp_qc()
+                try:
+                    show_hosp_qc()
+                except Exception as e:
+                    st.write(f"Error loading Hospitalization QC: {e}")
 
             with tab3:
-                show_labs_qc()
+                try:
+                    show_labs_qc()
+                except Exception as e:
+                    st.write(f"Error loading Labs QC: {e}")
 
             with tab4:
-                show_meds_qc()
+                try:
+                    show_meds_qc()
+                except Exception as e:
+                    st.write(f"Error loading Medication QC: {e}")
 
             # with tab5:
-            #     show_microbio_qc()
+            #     try:
+            #         show_microbio_qc()
+            #     except Exception as e:
+            #         st.write(f"Error loading Microbiology QC: {e}")
 
             with tab5:
-                show_patient_qc()
+                try:
+                    show_patient_qc()
+                except Exception as e:
+                    st.write(f"Error loading Patient QC: {e}")
 
             with tab6:
-                show_patient_assess_qc()
+                try:
+                    show_patient_assess_qc()
+                except Exception as e:
+                    st.write(f"Error loading Patient Assessment QC: {e}")
 
             with tab7:
-                show_position_qc()
+                try:
+                    show_position_qc()
+                except Exception as e:
+                    st.write(f"Error loading Position QC: {e}")
 
             with tab8:
-                show_respiratory_support_qc()
+                try:
+                    show_respiratory_support_qc()
+                except Exception as e:
+                    st.write(f"Error loading Respiratory Support QC: {e}")
 
             with tab9:
-                show_vitals_qc()
+                try:
+                    show_vitals_qc()
+                except Exception as e:
+                    st.write(f"Error loading Vitals QC: {e}")
 
   
 parent_dir = os.path.dirname(os.path.abspath(__file__))
