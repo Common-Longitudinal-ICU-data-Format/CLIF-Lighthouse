@@ -13,7 +13,15 @@ source("server.R")
 options(shiny.maxRequestSize = 100 * 1024^4)
 
 # Setup logger
+if (file.exists("app.log")) {
+  file.remove("app.log")  # Delete old log file
+}
 flog.appender(appender.file("app.log"))  # Log to a file
 flog.threshold(DEBUG)  # Set logging level
+
+# Remove existing database 
+if (file.exists("cohort.duckdb")) {
+  file.remove("cohort.duckdb")
+}
 
 shinyApp(ui, server)
