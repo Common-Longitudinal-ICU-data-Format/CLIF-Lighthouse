@@ -216,14 +216,35 @@ def show_respiratory_support_qc():
                     var_name='attribute',        
                     value_name='value'           
                 )
-                overall_category_summary = long_format.groupby(['device_category', 'attribute'])['value'].describe()
+
+                # Ensure 'value' is numeric
+                long_format['value'] = pd.to_numeric(long_format['value'], errors='coerce')
+
+                overall_category_summary = long_format.groupby(['device_category', 'attribute'])['value'].describe(
+                    percentiles=[.25, .5, .75]
+                ).loc[:, ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max']]
+                
                 overall_category_summary = overall_category_summary.reset_index()
                 st.write(overall_category_summary)
+
                 cat_summary_csv = overall_category_summary.to_csv(index=False)
                 if download_path is not None:
                     with open(os.path.join(download_path, f"{TABLE}_category_summary_stats.csv"), 'w') as file:
                         file.write(cat_summary_csv)
                     logger.info(f"Summary statistics saved to {download_path}/{TABLE}_category_summary_stats.csv")
+
+                # Create a histogram data for the overall device category
+                device_counts = data['device_category'].value_counts()
+                device_counts_df = device_counts.reset_index()
+                device_counts_df.columns = ['device_category', 'count']
+
+                # Save the histogram data to CSV if download path is provided
+                if download_path is not None:
+                    histogram_csv = device_counts_df.to_csv(index=False)
+                    with open(os.path.join(download_path, f"{TABLE}_device_category_histogram.csv"), 'w') as file:
+                        file.write(histogram_csv)
+                    logger.info(f"Device category histogram saved to {download_path}/{TABLE}_device_category_histogram.csv")
+
                 logger.info("Displayed category summary statistics.")
                 
                 # Device Category with Mode Category Summary
