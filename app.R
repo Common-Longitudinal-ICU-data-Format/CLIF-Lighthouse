@@ -5,7 +5,8 @@ library(jsonlite)
 library(arrow)
 library(fst)
 library(uuid)
-library(futile.logger)  # Logging package
+library(futile.logger)  
+library(magrittr)
 
 source("ui.R")
 source("server.R")

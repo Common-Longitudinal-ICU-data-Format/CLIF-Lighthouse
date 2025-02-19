@@ -38,7 +38,8 @@ ui <- fluidPage(
                         wellPanel(
                           tags$h4("Cohort Entry Events"),
                           uiOutput("cohort_entry_ui"),  # Dynamically generate multiple criteria inputs here
-                          actionButton("add_criteria", "+ Add Cohort Entry Event")
+                          actionButton("add_criteria", "+ Add Cohort Entry Event"),
+                          actionButton("remove_criteria", "- Remove Last Cohort Entry", class = "btn-warning")
                         )
                  ),
 
@@ -46,7 +47,8 @@ ui <- fluidPage(
                         wellPanel(
                           tags$h4("Inclusion Criteria"),
                           uiOutput("inclusion_criteria_ui"),  # Dynamically generate inclusion criteria inputs
-                          actionButton("add_inclusion_criteria", "+ Add Inclusion Criteria")
+                          actionButton("add_inclusion_criteria", "+ Add Inclusion Criteria"),
+                          actionButton("remove_criteria", "- Remove Last Inclusion Criteria", class = "btn-warning")
                         )
                  ),
 
@@ -54,7 +56,8 @@ ui <- fluidPage(
                         wellPanel(
                           tags$h4("Exclusion Criteria"),
                           uiOutput("exclusion_criteria_ui"),  # Dynamically generate exclusion criteria inputs
-                          actionButton("add_exclusion_criteria", "+ Add Exclusion Criteria")
+                          actionButton("add_exclusion_criteria", "+ Add Exclusion Criteria"),
+                          actionButton("remove_criteria", "- Remove Last Exclusion Criteria", class = "btn-warning")
                         )
                  )
                ),
@@ -84,7 +87,13 @@ ui <- fluidPage(
               )
                ),
       tabPanel("Summary",
-                 tags$h4("Placeholder for future content")  # Empty tab
+               tags$h3("Cohort Summary"),
+               tags$h5("Cohort Definition"),
+               textOutput("cohort_definition_display"),  # Display cohort definition
+               tags$h5("Cohort Preview"),
+               DT::dataTableOutput("filtered_data_table"),  # Show joined data
+               tags$h5("Summary Statistics"),
+               DT::dataTableOutput("summary_stats_table")
               ),
 
       tabPanel("Export",
