@@ -63,6 +63,11 @@ ui <- fluidPage(
                ),
                fluidRow(
                  column(12,
+                        actionButton("generate_summary", "Generate Summary")
+                 )
+               ),
+               fluidRow(
+                 column(12,
                         wellPanel(
                           tags$h4("Cohort Entry Summary"),
                           uiOutput("cohort_entry_summary")  # Display summary of cohort entry events
@@ -88,14 +93,22 @@ ui <- fluidPage(
                ),
       tabPanel("Summary",
                tags$h3("Cohort Summary"),
-               tags$h5("Cohort Definition"),
+               tags$h4("Cohort Definition"),
                textOutput("cohort_definition_display"),  # Display cohort definition
-               tags$h5("Cohort Preview"),
-               DT::dataTableOutput("filtered_data_table"),  # Show joined data
-               tags$h5("Summary Statistics"),
-               DT::dataTableOutput("summary_stats_table")
+               tags$h4("Cohort Preview"),
+               div(class = "table-responsive",  # Added div for horizontal scrolling
+                   DT::dataTableOutput("filtered_data_table")  # Show joined data
+               ),
+               tags$h4("Summary Statistics"),
+               div(class = "table-responsive",  # Added div for horizontal scrolling
+                   DT::dataTableOutput("summary_stats_table")  # Show summary statistics
+               )
               ),
 
       tabPanel("Export",
-                tags$h4("Placeholder for future content")  # Empty tab
+                tags$p("Download the cohort definition, including cohort entry events, inclusion, and exclusion criteria in JSON format for future reference."),
+                downloadButton("download_cohort_definition", "Download Cohort Definition"),
+                tags$br(),
+                tags$p("Export the cohort data as a CSV file for further analysis."),
+                downloadButton("export_data", "Export Data as CSV")
               ))))

@@ -1,3 +1,4 @@
+library(tableone)
 # Define Server
 server <- function(input, output, session) {
   
@@ -39,9 +40,39 @@ server <- function(input, output, session) {
     
     if (length(temp_data) > 0) {
       uploaded_data(temp_data)
+      register_all_tables(uploaded_data())  # Call the function to register all tables
     } else {
       flog.error("No valid data files were uploaded.")
     }
+  })
+  
+  # Function to register all tables in DuckDB
+  register_all_tables <- function(uploaded_data) {
+    for (file_name in names(uploaded_data)) {
+      tryCatch({
+        # Determine the table name (remove file extension)
+        table_name <- gsub("\\.(csv|parquet)$", "", file_name)
+        file_path <- uploaded_data[[file_name]]
+        
+        # Check if table already exists before registering
+        if (!table_name %in% dbListTables(db_connection)) {
+          # Register the table in DuckDB
+          dbExecute(db_connection, paste0("CREATE OR REPLACE TABLE ", table_name, 
+                                         " AS SELECT * FROM read_parquet('", file_path, "')"))
+          flog.info("Table %s registered successfully from file %s.", table_name, file_name)
+        } else {
+          flog.info("Table %s already registered, skipping.", table_name)
+        }
+      }, error = function(e) {
+        flog.error("Error registering table %s: %s", file_name, e$message)
+      })
+    }
+  }
+  
+  # Initialize inputs to NULL or empty
+  observe({
+    updateSelectizeInput(session, "cohort_entry_events_1", selected = NULL)
+    updateSelectizeInput(session, "cohort_column_selection_1", selected = NULL)
   })
   
   # Generate table choices dynamically
@@ -58,9 +89,9 @@ server <- function(input, output, session) {
       fluidRow(
         tags$h5(paste("Cohort Entry Event", i)),
         selectizeInput(paste0("cohort_entry_events_", i), "Select Table",
-                    choices = table_choices(), selected = NULL, multiple = FALSE),
+                    choices = c("None" = "", table_choices()), selected = "", multiple = FALSE),
         selectizeInput(paste0("cohort_column_selection_", i), "Select Column",
-                    choices = c(""), selected = NULL, multiple = FALSE),
+                    choices = c("None" = ""), selected = "", multiple = FALSE),
         uiOutput(paste0("cohort_dynamic_filter_ui_", i))
       )
     })
@@ -74,9 +105,9 @@ server <- function(input, output, session) {
       fluidRow(
         tags$h5(paste("Inclusion Criteria", i)),
         selectizeInput(paste0("inclusion_criteria_events_", i), "Select Table",
-                    choices = table_choices(), selected = NULL, multiple = FALSE),
+                    choices = c("None" = "", table_choices()), selected = "", multiple = FALSE),
         selectizeInput(paste0("inclusion_column_selection_", i), "Select Column",
-                    choices = c(""), selected = NULL, multiple = FALSE),
+                    choices = c("None" = ""), selected = "", multiple = FALSE),
         uiOutput(paste0("inclusion_dynamic_filter_ui_", i))
       )
     })
@@ -90,9 +121,9 @@ server <- function(input, output, session) {
       fluidRow(
         tags$h5(paste("Exclusion Criteria", i)),
         selectizeInput(paste0("exclusion_criteria_events_", i), "Select Table",
-                    choices = table_choices(), selected = NULL, multiple = FALSE),
+                    choices = c("None" = "", table_choices()), selected = "", multiple = FALSE),
         selectizeInput(paste0("exclusion_column_selection_", i), "Select Column",
-                    choices = c(""), selected = NULL, multiple = FALSE),
+                    choices = c("None" = ""), selected = "", multiple = FALSE),
         uiOutput(paste0("exclusion_dynamic_filter_ui_", i))
       )
     })
@@ -147,12 +178,12 @@ server <- function(input, output, session) {
       
       for (i in 1:num_criteria) {
         local({
-          current_i <- i  # Capture the loop variable properly
+          current_i <- i
           
           observeEvent(input[[paste0(column_prefix, current_i)]], {
             req(input[[paste0(column_prefix, current_i)]])
             
-            invalidateLater(1000, session)  # Force UI updates every second
+            invalidateLater(1000, session)
 
             selected_column <- input[[paste0(column_prefix, current_i)]]
             selected_table <- input[[paste0(event_prefix, current_i)]]
@@ -161,17 +192,9 @@ server <- function(input, output, session) {
             full_file_names <- names(uploaded_data())
             cleaned_names <- gsub("\\.(csv|parquet)$", "", full_file_names, ignore.case = TRUE)
             selected_table_full <- full_file_names[which(cleaned_names == selected_table)]
-            selected_path <- uploaded_data()[[selected_table_full]]
-            
-            # **REGISTER TABLE IN DUCKDB**
-            duckdb_table_name <- selected_table  # Use cleaned table name
-            flog.info("Registering DuckDB table: %s from file %s", duckdb_table_name, selected_table_full)
-            
-            dbExecute(db_connection, paste0("CREATE OR REPLACE TABLE ", duckdb_table_name, 
-                                            " AS SELECT * FROM read_parquet('", selected_path, "')"))
             
             # **Fetch Column Type**
-            type_query <- paste0("PRAGMA table_info(", duckdb_table_name, ")")
+            type_query <- paste0("PRAGMA table_info(", selected_table, ")")
             column_info <- tryCatch({
               dbGetQuery(db_connection, type_query)
             }, error = function(e) {
@@ -209,7 +232,7 @@ server <- function(input, output, session) {
                 } else if (grepl("INT|DOUBLE|NUMERIC|FLOAT", column_type, ignore.case = TRUE)) {
                   range_query <- paste0("
                     SELECT MIN(", selected_column, ") AS min_val, MAX(", selected_column, ") AS max_val 
-                    FROM ", duckdb_table_name, "
+                    FROM ", selected_table, "
                   ")
 
                   flog.info("Executing range query: %s", range_query)
@@ -236,7 +259,7 @@ server <- function(input, output, session) {
                 } else {
                   unique_query <- paste0("
                     SELECT DISTINCT ", selected_column, " 
-                    FROM ", duckdb_table_name, "
+                    FROM ", selected_table, "
                   ")
 
                   flog.info("Executing unique values query: %s", unique_query)
@@ -442,155 +465,274 @@ server <- function(input, output, session) {
     cohort_definition_text()  # Return stored definition
   })
   
+  # Add a reactiveVal to store the filtered data
   filtered_data <- reactiveVal(NULL)
-  # Render sample dataframe in Summary Tab
-  observe({
+  
+  # Remove the automatic observe block that updates filtered_data
+  # Instead, create a function to build the query
+  build_cohort_query <- function() {
     req(uploaded_data())
     
     num_criteria <- cohort_criteria_count()
     if (num_criteria < 1) return(NULL)
     
-    # Get selected cohort entry table and column
+    # Get selected tables and columns
     cohort_table <- input[[paste0("cohort_entry_events_", 1)]]
     cohort_column <- input[[paste0("cohort_column_selection_", 1)]]
     cohort_filter <- input[[paste0("cohort_dynamic_filter_ui_", 1)]]
     
-    # Get selected inclusion criteria table (optional)
     inclusion_table <- input[[paste0("inclusion_criteria_events_", 1)]]
+    inclusion_column <- input[[paste0("inclusion_column_selection_", 1)]]
+    inclusion_filter <- input[[paste0("inclusion_dynamic_filter_ui_", 1)]]
     
-    if (is.null(cohort_table) || is.null(cohort_column) || is.null(cohort_filter)) {
+    exclusion_table <- input[[paste0("exclusion_criteria_events_", 1)]]
+    exclusion_column <- input[[paste0("exclusion_column_selection_", 1)]]
+    exclusion_filter <- input[[paste0("exclusion_dynamic_filter_ui_", 1)]]
+    
+    # Basic validation
+    if (is.null(cohort_table) || cohort_table == "" || 
+        is.null(cohort_column) || cohort_column == "" || 
+        is.null(cohort_filter)) {
       return(NULL)
     }
     
-    # **Construct WHERE condition for cohort table**
-    if (is.numeric(cohort_filter)) {
-      condition <- paste0(cohort_column, " BETWEEN ", cohort_filter[1], " AND ", cohort_filter[2])
-    } else if (is.character(cohort_filter)) {
-      filter_values <- paste0("'", paste(cohort_filter, collapse = "','"), "'")
-      condition <- paste0(cohort_column, " IN (", filter_values, ")")
-    } else {
-      return(NULL)
-    }
-    
-    # **Handle Case: No Inclusion Table Selected**
-    if (is.null(inclusion_table) || inclusion_table == "") {
-      query <- paste0("SELECT * FROM ", cohort_table, " WHERE ", condition, " LIMIT 5")
-      flog.info("Executing query (without inclusion table): %s", query)
-    } else {
-      # **Find common column ending with `_id`**
-      get_id_columns <- function(table_name) {
-        query <- paste0("PRAGMA table_info(", table_name, ")")
-        tryCatch({
-          col_info <- dbGetQuery(db_connection, query)
-          id_columns <- col_info$name[grep("_id$", col_info$name)]  # Get columns ending with `_id`
-          
-          # Always include patient_id and hospitalization_id if they exist
-          if ("patient_id" %in% col_info$name) {
-            id_columns <- unique(c(id_columns, "patient_id"))
-          }
-          if ("hospitalization_id" %in% col_info$name) {
-            id_columns <- unique(c(id_columns, "hospitalization_id"))
-          }
-          
-          return(id_columns)
-        }, error = function(e) {
-          flog.error("Error fetching column info for %s: %s", table_name, e$message)
-          return(NULL)
-        })
-      }
+    # Function to get common ID columns between two tables
+    get_common_id_columns <- function(table1, table2) {
+      query1 <- paste0("PRAGMA table_info(", table1, ")")
+      query2 <- paste0("PRAGMA table_info(", table2, ")")
       
-      cohort_id_columns <- get_id_columns(cohort_table)
-      inclusion_id_columns <- get_id_columns(inclusion_table)
-      
-      # Find common `_id` column
-      common_id_column <- intersect(cohort_id_columns, inclusion_id_columns)
-      
-      if (length(common_id_column) == 0) {
-        flog.warn("No common `_id` column found for joining. Running without join.")
-        query <- paste0("SELECT * FROM ", cohort_table, " WHERE ", condition, " LIMIT 5")
-      } else {
-        # Use the first common `_id` column
-        join_column <- common_id_column[1]
-        flog.info("Joining tables on column: %s", join_column)
+      tryCatch({
+        col_info1 <- dbGetQuery(db_connection, query1)
+        col_info2 <- dbGetQuery(db_connection, query2)
         
-        # **Construct SQL query with LEFT JOIN**
-        query <- paste0("
-        SELECT c.*, i.* 
-        FROM ", cohort_table, " AS c
-        LEFT JOIN ", inclusion_table, " AS i
-        ON c.", join_column, " = i.", join_column, "
-        WHERE ", condition, "
-        LIMIT 5
-      ")
+        # Get all ID columns (including patient_id and hospitalization_id)
+        id_columns1 <- col_info1$name[grep("_id$", col_info1$name)]
+        id_columns2 <- col_info2$name[grep("_id$", col_info2$name)]
+        
+        # Always include patient_id and hospitalization_id if they exist
+        if ("patient_id" %in% col_info1$name) id_columns1 <- unique(c(id_columns1, "patient_id"))
+        if ("hospitalization_id" %in% col_info1$name) id_columns1 <- unique(c(id_columns1, "hospitalization_id"))
+        if ("patient_id" %in% col_info2$name) id_columns2 <- unique(c(id_columns2, "patient_id"))
+        if ("hospitalization_id" %in% col_info2$name) id_columns2 <- unique(c(id_columns2, "hospitalization_id"))
+        
+        common_columns <- intersect(id_columns1, id_columns2)
+        flog.info("Common ID columns between %s and %s: %s", table1, table2, toString(common_columns))
+        return(common_columns)
+      }, error = function(e) {
+        flog.error("Error getting common ID columns: %s", e$message)
+        return(NULL)
+      })
+    }
+    
+    # Start with base query
+    query <- paste0("SELECT * FROM ", cohort_table, " AS c")
+    
+    # Add LEFT JOIN for inclusion if different from cohort
+    if (!is.null(inclusion_table) && inclusion_table != "" && inclusion_table != cohort_table) {
+      common_columns <- get_common_id_columns(cohort_table, inclusion_table)
+      if (length(common_columns) > 0) {
+        join_column <- common_columns[1]  # Use the first common column
+        query <- paste0(query, "
+          LEFT JOIN ", inclusion_table, " AS i
+          ON c.", join_column, " = i.", join_column)
       }
+    }
+    
+    # Add LEFT JOIN for exclusion if different from both cohort and inclusion
+    if (!is.null(exclusion_table) && exclusion_table != "" && 
+        exclusion_table != cohort_table && exclusion_table != inclusion_table) {
+      # Try to join with cohort table first
+      common_columns <- get_common_id_columns(cohort_table, exclusion_table)
+      if (length(common_columns) > 0) {
+        join_column <- common_columns[1]
+        query <- paste0(query, "
+          LEFT JOIN ", exclusion_table, " AS e
+          ON c.", join_column, " = e.", join_column)
+      } else {
+        # If no common columns with cohort, try inclusion table
+        common_columns <- get_common_id_columns(inclusion_table, exclusion_table)
+        if (length(common_columns) > 0) {
+          join_column <- common_columns[1]
+          query <- paste0(query, "
+            LEFT JOIN ", exclusion_table, " AS e
+            ON i.", join_column, " = e.", join_column)
+        }
+      }
+    }
+    
+    # Build WHERE conditions
+    where_conditions <- c()
+    
+    # Cohort condition
+    if (is.numeric(cohort_filter)) {
+      where_conditions <- c(where_conditions, 
+        paste0("c.", cohort_column, " BETWEEN ", cohort_filter[1], " AND ", cohort_filter[2]))
+    } else if (is.character(cohort_filter)) {
+      where_conditions <- c(where_conditions,
+        paste0("c.", cohort_column, " IN ('", paste(cohort_filter, collapse = "','"), "')"))
+    }
+    
+    # Inclusion condition
+    if (!is.null(inclusion_filter)) {
+      if (inclusion_table == cohort_table) {
+        # If inclusion is same as cohort, use 'c' alias
+        if (is.numeric(inclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("c.", inclusion_column, " BETWEEN ", inclusion_filter[1], " AND ", inclusion_filter[2]))
+        } else if (is.character(inclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("c.", inclusion_column, " IN ('", paste(inclusion_filter, collapse = "','"), "')"))
+        }
+      } else {
+        # If inclusion is different table, use 'i' alias
+        if (is.numeric(inclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("i.", inclusion_column, " BETWEEN ", inclusion_filter[1], " AND ", inclusion_filter[2]))
+        } else if (is.character(inclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("i.", inclusion_column, " IN ('", paste(inclusion_filter, collapse = "','"), "')"))
+        }
+      }
+    }
+    
+    # Exclusion condition
+    if (!is.null(exclusion_filter)) {
+      if (exclusion_table == cohort_table) {
+        # If exclusion is same as cohort, use 'c' alias
+        if (is.numeric(exclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("c.", exclusion_column, " NOT BETWEEN ", exclusion_filter[1], " AND ", exclusion_filter[2]))
+        } else if (is.character(exclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("c.", exclusion_column, " NOT IN ('", paste(exclusion_filter, collapse = "','"), "')"))
+        }
+      } else if (exclusion_table == inclusion_table) {
+        # If exclusion is same as inclusion, use 'i' alias
+        if (is.numeric(exclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("i.", exclusion_column, " NOT BETWEEN ", exclusion_filter[1], " AND ", exclusion_filter[2]))
+        } else if (is.character(exclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("i.", exclusion_column, " NOT IN ('", paste(exclusion_filter, collapse = "','"), "')"))
+        }
+      } else {
+        # If exclusion is different table, use 'e' alias
+        if (is.numeric(exclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("e.", exclusion_column, " NOT BETWEEN ", exclusion_filter[1], " AND ", exclusion_filter[2]))
+        } else if (is.character(exclusion_filter)) {
+          where_conditions <- c(where_conditions,
+            paste0("e.", exclusion_column, " NOT IN ('", paste(exclusion_filter, collapse = "','"), "')"))
+        }
+      }
+    }
+    
+    # Add WHERE clause if we have conditions
+    if (length(where_conditions) > 0) {
+      query <- paste0(query, "\nWHERE ", paste(where_conditions, collapse = " AND "))
+    }
+    
+    return(query)
+  }
+  
+  # Modify the Generate Summary button handler
+  observeEvent(input$generate_summary, {
+    req(uploaded_data())  # Ensure data is uploaded
+    
+    # Build the query
+    query <- build_cohort_query()
+    if (is.null(query)) {
+      showNotification("Please select cohort criteria before generating summary.", type = "warning")
+      return(NULL)
     }
     
     flog.info("Executing query: %s", query)
     
-    # **Execute SQL Query and store results**
+    # Execute query and store results
     tryCatch({
       result <- dbGetQuery(db_connection, query)
       filtered_data(result)  # Store result in reactiveVal
+      
+      # Generate summary statistics
+      summary_stats <- generate_summary_stats(result)
+      summary_data(summary_stats)  # Store summary data
+      
+      # Display summary statistics in a DataTable
+      output$summary_stats_table <- DT::renderDataTable({
+        req(summary_data())
+        summary_data()
+      })
     }, error = function(e) {
-      flog.error("Error fetching joined data: %s", e$message)
-      filtered_data(NULL)  # Reset if error occurs
+      flog.error("Error executing query: %s", e$message)
+      showNotification("Error generating summary. Please check your criteria.", type = "error")
     })
   })
   
-  # Render stored `filtered_data()` in DataTable
+  # Update the filtered data table output
   output$filtered_data_table <- DT::renderDataTable({
-    req(filtered_data())
-    filtered_data()
+    req(filtered_data())  # Ensure filtered_data() is available
+    DT::datatable(filtered_data(), options = list(pageLength = 3))
   })
-  
   
   generate_summary_stats <- function(data) {
     if (is.null(data) || nrow(data) == 0) {
+      flog.warn("No data available for summary generation.")
       return(NULL)
     }
     
-    # Identify numeric columns only
+    # Identify numeric and categorical columns
     numeric_cols <- sapply(data, is.numeric)
-    data_numeric <- data[, numeric_cols, drop = FALSE]
+    categorical_cols <- sapply(data, is.factor) | sapply(data, is.character)
     
-    if (ncol(data_numeric) == 0) {
-      return(data.frame(Message = "No numeric columns available for summary"))
+    # Combine numeric and categorical columns
+    all_cols <- colnames(data)[numeric_cols | categorical_cols]
+    
+    # Exclude patient_id and hospitalization_id from summary columns
+    all_cols <- setdiff(all_cols, c("patient_id", "hospitalization_id", "zipcode_five_digit", "zipcode_nine_digit", "census_block_group", "latitude", "longitude"))
+    
+    if (length(all_cols) == 0) {
+      flog.warn("No numeric or categorical columns available for summary.")
+      return(data.frame(Message = "No numeric or categorical columns available for summary"))
     }
     
-    # Compute summary statistics
-    summary_stats <- data.frame(
-      Metric = c("Count", "Mean", "Std Dev", "Min", "25%", "50%", "75%", "Max")
-    )
+    # Create a TableOne object
+    table_one <- CreateTableOne(vars = all_cols, data = data, test = TRUE)
     
-    for (col in colnames(data_numeric)) {
-      stats <- c(
-        Count = nrow(data_numeric),
-        Mean = mean(data_numeric[[col]], na.rm = TRUE),
-        Std_Dev = sd(data_numeric[[col]], na.rm = TRUE),
-        Min = min(data_numeric[[col]], na.rm = TRUE),
-        P25 = quantile(data_numeric[[col]], 0.25, na.rm = TRUE),
-        P50 = median(data_numeric[[col]], na.rm = TRUE),
-        P75 = quantile(data_numeric[[col]], 0.75, na.rm = TRUE),
-        Max = max(data_numeric[[col]], na.rm = TRUE)
-      )
-      
-      summary_stats[[col]] <- stats
-    }
+    # Convert TableOne to a data frame for rendering
+    summary_stats <- print(table_one, printToggle = FALSE, quote = FALSE)
     
+    flog.info("Summary statistics generation completed.")
     return(summary_stats)
   }
   
-  summary_data <- reactive({
-    req(filtered_data())  # Ensure data exists
-    generate_summary_stats(filtered_data())
-  })
+  # Add a reactiveVal to store summary data
+  summary_data <- reactiveVal(NULL)
   
-  output$summary_stats_table <- DT::renderDataTable({
-    req(summary_data())  # Ensure data exists
-    summary_data()
-  })
+  # Handle the export of filtered data
+  output$export_data <- downloadHandler(
+    filename = function() {
+      paste("exported_data_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      req(filtered_data())  # Ensure filtered_data is available
+      
+      # Select only the relevant columns (hospitalization_id, patient_id)
+      export_data <- filtered_data()[, c("hospitalization_id", "patient_id"), drop = FALSE]
+      
+      # Remove rows with all NA values
+      export_data <- na.omit(export_data)
+      
+      # Check if export_data is empty
+      if (nrow(export_data) == 0) {
+        # Optionally, you can stop the function and provide feedback
+        stop("No data available to export. Please ensure that either hospitalization_id or patient_id exists.")
+      }
+      
+      # Write the data to a CSV file
+      write.csv(export_data, file, row.names = FALSE)
+    }
+  )
   
-
   # Close DB connection on exit
   onStop(function() {
     dbDisconnect(db_connection)
