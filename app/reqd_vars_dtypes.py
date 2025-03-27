@@ -1,9 +1,9 @@
 expected_data_types = {
     'Labs': {
         'hospitalization_id': 'object',
-        'lab_order_dttm': 'datetime64',
-        'lab_collect_dttm': 'datetime64',
-        'lab_result_dttm': 'datetime64',
+        'lab_order_dttm': 'datetime64[us, UTC]',
+        'lab_collect_dttm': 'datetime64[us, UTC]',
+        'lab_result_dttm': 'datetime64[us, UTC]',
         'lab_order_name': 'object',
         'lab_order_category': 'object',
         'lab_name': 'object',
@@ -17,7 +17,7 @@ expected_data_types = {
     },
     'Vitals': {
         'hospitalization_id': 'object',
-        'recorded_dttm': 'datetime64',
+        'recorded_dttm': 'datetime64[us, UTC]',
         'vital_name': 'object',
         'vital_category': 'object',
         'vital_value': 'float64',
@@ -31,7 +31,7 @@ expected_data_types = {
     },
     'Respiratory_Support': {
         'hospitalization_id': 'object',
-        'recorded_dttm': 'datetime64',
+        'recorded_dttm': 'datetime64[us, UTC]',
         'device_name': 'object',
         'device_category': 'object',
         'vent_brand_name': 'object',
@@ -59,7 +59,7 @@ expected_data_types = {
     'Medication_admin_continuous': {
         'hospitalization_id': 'object',
         'med_order_id': 'object',
-        'admin_dttm': 'datetime64',
+        'admin_dttm': 'datetime64[us, UTC]',
         'med_name': 'object',
         'med_category': 'object',
         'med_group': 'object',
@@ -73,8 +73,8 @@ expected_data_types = {
     'ADT': {
         'hospitalization_id': 'object',
         'hospital_id': 'object',
-        'in_dttm': 'datetime64',
-        'out_dttm': 'datetime64',
+        'in_dttm': 'datetime64[us, UTC]',
+        'out_dttm': 'datetime64[us, UTC]',
         'location_name': 'object',
         'location_category': 'object'
     },
@@ -82,8 +82,8 @@ expected_data_types = {
         'patient_id': 'object',
         'hospitalization_id': 'object',
         'hospitalization_joined_id': 'object',  # Optional
-        'admission_dttm': 'datetime64',
-        'discharge_dttm': 'datetime64',
+        'admission_dttm': 'datetime64[us, UTC]',
+        'discharge_dttm': 'datetime64[us, UTC]',
         'age_at_admission': 'int64',
         'admission_type_name': 'object',
         'admission_type_category': 'object',
@@ -100,9 +100,9 @@ expected_data_types = {
     'Microbiology_Culture': {
         'hospitalization_id': 'object',
         'organism_id': 'object',
-        'order_dttm': 'datetime64',
-        'collect_dttm': 'datetime64',
-        'result_dttm': 'datetime64',
+        'order_dttm': 'datetime64[us, UTC]',
+        'collect_dttm': 'datetime64[us, UTC]',
+        'result_dttm': 'datetime64[us, UTC]',
         'fluid_name': 'object',
         'fluid_category': 'object',
         'component_name': 'object',
@@ -118,14 +118,14 @@ expected_data_types = {
         'ethnicity_category': 'object',
         'sex_name': 'object',
         'sex_category': 'object',
-        'birth_date': 'datetime64',
-        'death_dttm': 'datetime64',
+        'birth_date': 'datetime64[us, UTC]',
+        'death_dttm': 'datetime64[us, UTC]',
         'language_name': 'object',
         'language_category': 'object'
     },
     'Patient_Assessments': {
         'hospitalization_id': 'object',
-        'recorded_dttm': 'datetime64',
+        'recorded_dttm': 'datetime64[us, UTC]',
         'assessment_name': 'object',
         'assessment_category': 'object',
         'assessment_group': 'object',
@@ -136,7 +136,7 @@ expected_data_types = {
     'Position': {
         'patient_id': 'object',
         'hospitalization_id': 'object',
-        'recorded_dttm': 'datetime64',
+        'recorded_dttm': 'datetime64[us, UTC]',
         'position_name': 'object',
         'position_category': 'object'
     }
